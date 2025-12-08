@@ -1,0 +1,165 @@
+import { Link, useLocation } from 'react-router-dom';
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
+import { Button } from '@/components/ui/button';
+import {
+  Home,
+  BookOpen,
+  Video,
+  Users,
+  BarChart3,
+  Settings,
+  LogOut,
+  Play,
+  Upload,
+  Camera,
+  Radio,
+  GraduationCap,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
+import { useState } from 'react';
+
+interface NavItem {
+  label: string;
+  icon: React.ElementType;
+  href: string;
+  roles: ('student' | 'teacher' | 'admin')[];
+}
+
+const navItems: NavItem[] = [
+  { label: 'Dashboard', icon: Home, href: '/dashboard', roles: ['student', 'teacher', 'admin'] },
+  { label: 'Lessons', icon: BookOpen, href: '/lessons', roles: ['student', 'teacher', 'admin'] },
+  { label: 'Practice', icon: Camera, href: '/practice', roles: ['student'] },
+  { label: 'Live Sessions', icon: Radio, href: '/live', roles: ['student', 'teacher'] },
+  { label: 'My Uploads', icon: Upload, href: '/uploads', roles: ['teacher'] },
+  { label: 'Submissions', icon: Video, href: '/submissions', roles: ['teacher'] },
+  { label: 'Users', icon: Users, href: '/admin/users', roles: ['admin'] },
+  { label: 'Analytics', icon: BarChart3, href: '/admin/analytics', roles: ['admin'] },
+];
+
+export function Sidebar() {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (!user) return null;
+
+  const filteredItems = navItems.filter(item => item.roles.includes(user.role));
+
+  const getRoleColor = () => {
+    switch (user.role) {
+      case 'admin': return 'bg-destructive/10 text-destructive';
+      case 'teacher': return 'bg-secondary/20 text-secondary-foreground';
+      default: return 'bg-primary/10 text-primary';
+    }
+  };
+
+  return (
+    <aside 
+      className={cn(
+        "fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col",
+        collapsed ? "w-20" : "w-64"
+      )}
+    >
+      {/* Logo */}
+      <div className="flex items-center gap-3 px-4 py-6 border-b border-sidebar-border">
+        <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
+          <GraduationCap className="w-6 h-6 text-primary-foreground" />
+        </div>
+        {!collapsed && (
+          <div className="animate-fade-in">
+            <h1 className="font-bold text-lg text-sidebar-foreground">DeafLearn</h1>
+            <p className="text-xs text-muted-foreground">Sign Language Hub</p>
+          </div>
+        )}
+      </div>
+
+      {/* User Info */}
+      <div className={cn(
+        "px-4 py-4 border-b border-sidebar-border",
+        collapsed ? "flex justify-center" : ""
+      )}>
+        <div className={cn(
+          "flex items-center gap-3",
+          collapsed ? "flex-col" : ""
+        )}>
+          <div className="w-10 h-10 rounded-full bg-gradient-secondary flex items-center justify-center text-secondary-foreground font-semibold">
+            {user.name.charAt(0).toUpperCase()}
+          </div>
+          {!collapsed && (
+            <div className="flex-1 min-w-0 animate-fade-in">
+              <p className="font-medium text-sidebar-foreground truncate">{user.name}</p>
+              <span className={cn("text-xs px-2 py-0.5 rounded-full capitalize", getRoleColor())}>
+                {user.role}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {filteredItems.map((item) => {
+          const isActive = location.pathname === item.href || 
+                          (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+          const Icon = item.icon;
+          
+          return (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group",
+                isActive 
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" 
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+                collapsed ? "justify-center" : ""
+              )}
+              title={collapsed ? item.label : undefined}
+            >
+              <Icon className={cn(
+                "w-5 h-5 transition-transform",
+                isActive ? "text-sidebar-primary" : "",
+                "group-hover:scale-110"
+              )} />
+              {!collapsed && (
+                <span className="animate-fade-in">{item.label}</span>
+              )}
+              {isActive && !collapsed && (
+                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-sidebar-primary" />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Bottom Actions */}
+      <div className="px-3 py-4 border-t border-sidebar-border space-y-2">
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent/50",
+            collapsed ? "justify-center px-0" : ""
+          )}
+          onClick={logout}
+        >
+          <LogOut className="w-5 h-5" />
+          {!collapsed && <span>Logout</span>}
+        </Button>
+      </div>
+
+      {/* Collapse Toggle */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-card border border-border shadow-sm flex items-center justify-center hover:bg-muted transition-colors"
+      >
+        {collapsed ? (
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        ) : (
+          <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+        )}
+      </button>
+    </aside>
+  );
+}
