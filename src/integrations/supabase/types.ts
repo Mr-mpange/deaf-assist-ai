@@ -14,16 +14,362 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      badges: {
+        Row: {
+          created_at: string
+          description: string
+          icon: string
+          id: string
+          name: string
+          requirement_type: string
+          requirement_value: number
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          icon: string
+          id?: string
+          name: string
+          requirement_type: string
+          requirement_value: number
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          icon?: string
+          id?: string
+          name?: string
+          requirement_type?: string
+          requirement_value?: number
+        }
+        Relationships: []
+      }
+      lesson_progress: {
+        Row: {
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          id: string
+          lesson_id: string
+          progress_percent: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          lesson_id: string
+          progress_percent?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          lesson_id?: string
+          progress_percent?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_progress_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lessons: {
+        Row: {
+          author_id: string
+          category: string
+          created_at: string
+          description: string | null
+          difficulty: string
+          duration: number
+          id: string
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          video_url: string | null
+          views: number
+        }
+        Insert: {
+          author_id: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          difficulty?: string
+          duration?: number
+          id?: string
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          video_url?: string | null
+          views?: number
+        }
+        Update: {
+          author_id?: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          difficulty?: string
+          duration?: number
+          id?: string
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          video_url?: string | null
+          views?: number
+        }
+        Relationships: []
+      }
+      live_sessions: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          host_id: string
+          id: string
+          participants_count: number
+          scheduled_at: string
+          status: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          host_id: string
+          id?: string
+          participants_count?: number
+          scheduled_at: string
+          status?: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          host_id?: string
+          id?: string
+          participants_count?: number
+          scheduled_at?: string
+          status?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      practice_sessions: {
+        Row: {
+          accuracy_score: number | null
+          created_at: string
+          duration: number
+          id: string
+          signs_practiced: string[]
+          user_id: string
+        }
+        Insert: {
+          accuracy_score?: number | null
+          created_at?: string
+          duration?: number
+          id?: string
+          signs_practiced?: string[]
+          user_id: string
+        }
+        Update: {
+          accuracy_score?: number | null
+          created_at?: string
+          duration?: number
+          id?: string
+          signs_practiced?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      submissions: {
+        Row: {
+          ai_prediction: Json | null
+          feedback: string | null
+          id: string
+          lesson_id: string
+          reviewed_at: string | null
+          status: string
+          student_id: string
+          submitted_at: string
+          video_url: string | null
+        }
+        Insert: {
+          ai_prediction?: Json | null
+          feedback?: string | null
+          id?: string
+          lesson_id: string
+          reviewed_at?: string | null
+          status?: string
+          student_id: string
+          submitted_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          ai_prediction?: Json | null
+          feedback?: string | null
+          id?: string
+          lesson_id?: string
+          reviewed_at?: string | null
+          status?: string
+          student_id?: string
+          submitted_at?: string
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submissions_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_badges: {
+        Row: {
+          badge_id: string
+          earned_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          badge_id: string
+          earned_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          badge_id?: string
+          earned_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_progress: {
+        Row: {
+          current_streak: number
+          id: string
+          last_activity_date: string | null
+          lessons_completed: number
+          longest_streak: number
+          practice_sessions: number
+          signs_learned: number
+          total_watch_time: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_streak?: number
+          id?: string
+          last_activity_date?: string | null
+          lessons_completed?: number
+          longest_streak?: number
+          practice_sessions?: number
+          signs_learned?: number
+          total_watch_time?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_streak?: number
+          id?: string
+          last_activity_date?: string | null
+          lessons_completed?: number
+          longest_streak?: number
+          practice_sessions?: number
+          signs_learned?: number
+          total_watch_time?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      update_user_streak: { Args: { p_user_id: string }; Returns: undefined }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "teacher" | "student"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +496,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "teacher", "student"],
+    },
   },
 } as const
