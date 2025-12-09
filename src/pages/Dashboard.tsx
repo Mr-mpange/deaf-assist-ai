@@ -347,13 +347,13 @@ function AdminDashboard() {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { role } = useAuth();
 
   return (
     <DashboardLayout>
-      {user?.role === 'admin' && <AdminDashboard />}
-      {user?.role === 'teacher' && <TeacherDashboard />}
-      {user?.role === 'student' && <StudentDashboard />}
+      {role === 'admin' && <AdminDashboard />}
+      {role === 'teacher' && <TeacherDashboard />}
+      {(role === 'student' || !role) && <StudentDashboard />}
     </DashboardLayout>
   );
 }

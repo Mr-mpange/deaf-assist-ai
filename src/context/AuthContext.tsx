@@ -1,13 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { mockUsers, User } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { User, Session } from '@supabase/supabase-js';
+
+interface Profile {
+  id: string;
+  name: string | null;
+  avatar_url: string | null;
+}
 
 interface AuthContextType {
   user: User | null;
+  profile: Profile | null;
+  role: 'admin' | 'teacher' | 'student' | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string, role: 'student' | 'teacher') => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -15,51 +24,105 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [role, setRole] = useState<'admin' | 'teacher' | 'student' | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Check for stored user on mount
-    const storedUser = localStorage.getItem('deaflearn_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
-        localStorage.removeItem('deaflearn_user');
-      }
+  const fetchProfile = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, name, avatar_url')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (data) {
+      setProfile(data);
     }
-    setIsLoading(false);
+  };
+
+  const fetchRole = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (data) {
+      setRole(data.role as 'admin' | 'teacher' | 'student');
+    } else {
+      setRole('student'); // Default role
+    }
+  };
+
+  useEffect(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        // Defer Supabase calls with setTimeout to avoid deadlock
+        if (session?.user) {
+          setTimeout(() => {
+            fetchProfile(session.user.id);
+            fetchRole(session.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
+          setRole(null);
+        }
+        
+        setIsLoading(false);
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        fetchRole(session.user.id);
+      }
+      
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    setIsLoading(true);
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const foundUser = mockUsers.find(
-      u => u.email === email && u.password === password
-    );
-    
-    if (foundUser) {
-      const userWithoutPassword = { ...foundUser };
-      setUser(userWithoutPassword);
-      localStorage.setItem('deaflearn_user', JSON.stringify(userWithoutPassword));
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        toast({
+          title: "Login failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+      
       toast({
         title: "Welcome back!",
-        description: `Logged in as ${foundUser.name}`,
+        description: `Logged in successfully`,
       });
-      setIsLoading(false);
       return true;
+    } catch (error) {
+      toast({
+        title: "Login failed",
+        description: "An unexpected error occurred",
+        variant: "destructive",
+      });
+      return false;
     }
-    
-    toast({
-      title: "Login failed",
-      description: "Invalid email or password",
-      variant: "destructive",
-    });
-    setIsLoading(false);
-    return false;
   };
 
   const register = async (
@@ -68,48 +131,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string, 
     role: 'student' | 'teacher'
   ): Promise<boolean> => {
-    setIsLoading(true);
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Check if user exists
-    const exists = mockUsers.find(u => u.email === email);
-    if (exists) {
+    try {
+      const redirectUrl = `${window.location.origin}/`;
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            full_name: name,
+            role: role,
+          }
+        }
+      });
+      
+      if (error) {
+        toast({
+          title: "Registration failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      if (data.user) {
+        toast({
+          title: "Welcome to DeafLearn!",
+          description: "Your account has been created successfully",
+        });
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
       toast({
         title: "Registration failed",
-        description: "Email already registered",
+        description: "An unexpected error occurred",
         variant: "destructive",
       });
-      setIsLoading(false);
       return false;
     }
-    
-    // Create new user (in-memory)
-    const newUser: User = {
-      id: String(mockUsers.length + 1),
-      name,
-      email,
-      password,
-      role,
-      createdAt: new Date().toISOString(),
-    };
-    
-    mockUsers.push(newUser);
-    setUser(newUser);
-    localStorage.setItem('deaflearn_user', JSON.stringify(newUser));
-    
-    toast({
-      title: "Welcome to DeafLearn!",
-      description: "Your account has been created successfully",
-    });
-    setIsLoading(false);
-    return true;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('deaflearn_user');
+    setSession(null);
+    setProfile(null);
+    setRole(null);
     toast({
       title: "Logged out",
       description: "See you next time!",
@@ -120,6 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider 
       value={{ 
         user, 
+        profile,
+        role,
         isLoading, 
         login, 
         register, 

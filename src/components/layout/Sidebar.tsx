@@ -39,16 +39,19 @@ const navItems: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, profile, role, logout } = useAuth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
   if (!user) return null;
 
-  const filteredItems = navItems.filter(item => item.roles.includes(user.role));
+  const userRole = role || 'student';
+  const userName = profile?.name || user.email?.split('@')[0] || 'User';
+
+  const filteredItems = navItems.filter(item => item.roles.includes(userRole));
 
   const getRoleColor = () => {
-    switch (user.role) {
+    switch (userRole) {
       case 'admin': return 'bg-destructive/10 text-destructive';
       case 'teacher': return 'bg-secondary/20 text-secondary-foreground';
       default: return 'bg-primary/10 text-primary';
@@ -85,13 +88,13 @@ export function Sidebar() {
           collapsed ? "flex-col" : ""
         )}>
           <div className="w-10 h-10 rounded-full bg-gradient-secondary flex items-center justify-center text-secondary-foreground font-semibold">
-            {user.name.charAt(0).toUpperCase()}
+            {userName.charAt(0).toUpperCase()}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0 animate-fade-in">
-              <p className="font-medium text-sidebar-foreground truncate">{user.name}</p>
+              <p className="font-medium text-sidebar-foreground truncate">{userName}</p>
               <span className={cn("text-xs px-2 py-0.5 rounded-full capitalize", getRoleColor())}>
-                {user.role}
+                {userRole}
               </span>
             </div>
           )}
