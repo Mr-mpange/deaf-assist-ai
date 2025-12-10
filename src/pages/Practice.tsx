@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,25 +6,32 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Camera, 
   CameraOff, 
-  Upload, 
   Play, 
   RefreshCw,
   Sparkles,
   CheckCircle2,
-  XCircle,
-  Info
+  Info,
+  Hand,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useProgress } from '@/hooks/useProgress';
+import { useHandDetection, classifySign } from '@/hooks/useHandDetection';
 
 export default function Practice() {
   const [isCameraOn, setIsCameraOn] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
   const [prediction, setPrediction] = useState<{ sign: string; confidence: number } | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [signsDetected, setSignsDetected] = useState<string[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   const { toast } = useToast();
+  const { incrementProgress } = useProgress();
+  
+  const { isLoading: isModelLoading, error: modelError, results, detectHands, drawLandmarks } = useHandDetection(videoRef);
 
   const startCamera = async () => {
     try {
@@ -35,6 +42,10 @@ export default function Practice() {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setIsCameraOn(true);
+        toast({
+          title: "Camera Started",
+          description: "Position your hands in the frame",
+        });
       }
     } catch (err) {
       toast({
@@ -46,6 +57,10 @@ export default function Practice() {
   };
 
   const stopCamera = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -54,57 +69,68 @@ export default function Practice() {
       videoRef.current.srcObject = null;
     }
     setIsCameraOn(false);
-    setIsRecording(false);
-  };
-
-  const toggleRecording = () => {
-    if (!isCameraOn) {
-      toast({
-        title: "Camera Required",
-        description: "Please start the camera first",
-        variant: "destructive",
-      });
-      return;
-    }
-    setIsRecording(!isRecording);
-    
-    if (!isRecording) {
-      // Simulate AI analysis after 3 seconds
-      setTimeout(() => {
-        simulateAIAnalysis();
-      }, 3000);
-    }
-  };
-
-  const simulateAIAnalysis = () => {
-    setIsRecording(false);
-    setIsAnalyzing(true);
-    
-    // Simulate AI processing
-    setTimeout(() => {
-      const mockPredictions = [
-        { sign: 'HELLO', confidence: 0.92 },
-        { sign: 'THANK YOU', confidence: 0.88 },
-        { sign: 'GOODBYE', confidence: 0.95 },
-        { sign: 'PLEASE', confidence: 0.85 },
-        { sign: 'YES', confidence: 0.97 },
-      ];
-      
-      const randomPrediction = mockPredictions[Math.floor(Math.random() * mockPredictions.length)];
-      setPrediction(randomPrediction);
-      setIsAnalyzing(false);
-      
-      toast({
-        title: "Analysis Complete",
-        description: `Detected: ${randomPrediction.sign} (${Math.round(randomPrediction.confidence * 100)}% confidence)`,
-      });
-    }, 2000);
-  };
-
-  const resetPractice = () => {
+    setIsDetecting(false);
     setPrediction(null);
-    setIsRecording(false);
-    setIsAnalyzing(false);
+  };
+
+  const startDetection = useCallback(() => {
+    if (!isCameraOn || isModelLoading) return;
+    
+    setIsDetecting(true);
+    setPrediction(null);
+    
+    const detect = async () => {
+      await detectHands();
+      animationFrameRef.current = requestAnimationFrame(detect);
+    };
+    
+    detect();
+  }, [isCameraOn, isModelLoading, detectHands]);
+
+  const stopDetection = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    setIsDetecting(false);
+  };
+
+  // Process results when landmarks are detected
+  useEffect(() => {
+    if (!results?.landmarks || !canvasRef.current) return;
+    
+    // Draw landmarks on canvas
+    drawLandmarks(canvasRef.current, results.landmarks);
+    
+    // Classify the sign
+    const classified = classifySign(results.landmarks);
+    if (classified && classified.sign !== 'UNKNOWN') {
+      setPrediction(classified);
+      
+      // Track unique signs
+      if (!signsDetected.includes(classified.sign)) {
+        setSignsDetected(prev => [...prev, classified.sign]);
+        incrementProgress('signs_learned', 1);
+      }
+    }
+  }, [results, drawLandmarks, signsDetected, incrementProgress]);
+
+  const resetPractice = async () => {
+    setPrediction(null);
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    }
+    
+    // Increment practice session
+    await incrementProgress('practice_sessions', 1);
+    
+    toast({
+      title: "Practice Session Complete!",
+      description: `You detected ${signsDetected.length} different signs.`,
+    });
+    
+    setSignsDetected([]);
   };
 
   return (
@@ -117,9 +143,17 @@ export default function Practice() {
             Practice Mode
           </h1>
           <p className="text-muted-foreground mt-1">
-            Practice sign language with AI-powered feedback
+            Practice sign language with AI-powered hand detection
           </p>
         </div>
+
+        {modelError && (
+          <Card className="border-destructive bg-destructive/10">
+            <CardContent className="p-4">
+              <p className="text-destructive">{modelError}</p>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Camera View */}
@@ -128,13 +162,21 @@ export default function Practice() {
               <CardContent className="p-0">
                 <div className="relative aspect-video bg-foreground/5">
                   {isCameraOn ? (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                    />
+                    <>
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                      <canvas
+                        ref={canvasRef}
+                        width={640}
+                        height={480}
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                      />
+                    </>
                   ) : (
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <CameraOff className="w-16 h-16 text-muted-foreground/50 mb-4" />
@@ -142,20 +184,35 @@ export default function Practice() {
                     </div>
                   )}
                   
-                  {/* Recording indicator */}
-                  {isRecording && (
-                    <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-destructive/90 text-destructive-foreground rounded-full animate-pulse">
-                      <div className="w-2 h-2 rounded-full bg-destructive-foreground" />
-                      <span className="text-sm font-medium">Recording...</span>
+                  {/* Detection indicator */}
+                  {isDetecting && (
+                    <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-primary/90 text-primary-foreground rounded-full">
+                      <Hand className="w-4 h-4" />
+                      <span className="text-sm font-medium">Detecting...</span>
                     </div>
                   )}
 
-                  {/* Analyzing overlay */}
-                  {isAnalyzing && (
+                  {/* Model loading indicator */}
+                  {isModelLoading && isCameraOn && (
                     <div className="absolute inset-0 bg-foreground/50 flex items-center justify-center backdrop-blur-sm">
                       <div className="text-center text-primary-foreground">
-                        <RefreshCw className="w-12 h-12 mx-auto mb-4 animate-spin" />
-                        <p className="font-medium">Analyzing your sign...</p>
+                        <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin" />
+                        <p className="font-medium">Loading hand detection model...</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Current detection */}
+                  {prediction && isDetecting && (
+                    <div className="absolute bottom-4 left-4 right-4">
+                      <div className="bg-background/90 backdrop-blur-sm rounded-lg p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Sparkles className="w-5 h-5 text-primary" />
+                          <span className="font-semibold">{prediction.sign}</span>
+                        </div>
+                        <Badge variant={prediction.confidence >= 0.85 ? "default" : "secondary"}>
+                          {Math.round(prediction.confidence * 100)}% confidence
+                        </Badge>
                       </div>
                     </div>
                   )}
@@ -184,28 +241,28 @@ export default function Practice() {
               </Button>
               
               <Button
-                variant={isRecording ? "secondary" : "default"}
+                variant={isDetecting ? "secondary" : "default"}
                 size="lg"
-                onClick={toggleRecording}
-                disabled={!isCameraOn || isAnalyzing}
+                onClick={isDetecting ? stopDetection : startDetection}
+                disabled={!isCameraOn || isModelLoading}
               >
-                {isRecording ? (
+                {isDetecting ? (
                   <>
                     <div className="w-4 h-4 rounded-sm bg-destructive mr-2" />
-                    Stop Recording
+                    Stop Detection
                   </>
                 ) : (
                   <>
-                    <Play className="w-5 h-5 mr-2" />
-                    Start Recording
+                    <Hand className="w-5 h-5 mr-2" />
+                    Start Detection
                   </>
                 )}
               </Button>
 
-              {prediction && (
+              {signsDetected.length > 0 && (
                 <Button variant="outline" size="lg" onClick={resetPractice}>
                   <RefreshCw className="w-5 h-5 mr-2" />
-                  Try Again
+                  End Session
                 </Button>
               )}
             </div>
@@ -213,56 +270,22 @@ export default function Practice() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* AI Result */}
-            {prediction && (
+            {/* Signs Detected This Session */}
+            {signsDetected.length > 0 && (
               <Card className="border-border/50 shadow-card animate-scale-in">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-primary" />
-                    AI Detection Result
+                    <CheckCircle2 className="w-5 h-5 text-success" />
+                    Signs Detected ({signsDetected.length})
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="text-center p-6 bg-gradient-primary rounded-xl">
-                    <p className="text-sm text-primary-foreground/80 mb-1">Detected Sign</p>
-                    <p className="text-3xl font-bold text-primary-foreground">{prediction.sign}</p>
-                  </div>
-                  
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Confidence</span>
-                      <span className={cn(
-                        "font-medium",
-                        prediction.confidence >= 0.9 ? "text-success" : 
-                        prediction.confidence >= 0.7 ? "text-warning" : "text-destructive"
-                      )}>
-                        {Math.round(prediction.confidence * 100)}%
-                      </span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div 
-                        className={cn(
-                          "h-full rounded-full transition-all duration-500",
-                          prediction.confidence >= 0.9 ? "bg-success" : 
-                          prediction.confidence >= 0.7 ? "bg-warning" : "bg-destructive"
-                        )}
-                        style={{ width: `${prediction.confidence * 100}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
-                    {prediction.confidence >= 0.85 ? (
-                      <>
-                        <CheckCircle2 className="w-5 h-5 text-success" />
-                        <span className="text-sm">Great job! Your sign was clear.</span>
-                      </>
-                    ) : (
-                      <>
-                        <Info className="w-5 h-5 text-warning" />
-                        <span className="text-sm">Try to make your movements more distinct.</span>
-                      </>
-                    )}
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {signsDetected.map((sign, index) => (
+                      <Badge key={index} variant="outline" className="bg-primary/10">
+                        {sign}
+                      </Badge>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -280,7 +303,7 @@ export default function Practice() {
                   </div>
                   <div>
                     <p className="font-medium">Start Camera</p>
-                    <p className="text-sm text-muted-foreground">Position yourself in frame with good lighting</p>
+                    <p className="text-sm text-muted-foreground">Position yourself with good lighting</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
@@ -288,8 +311,8 @@ export default function Practice() {
                     2
                   </div>
                   <div>
-                    <p className="font-medium">Record Your Sign</p>
-                    <p className="text-sm text-muted-foreground">Perform the sign clearly and at a steady pace</p>
+                    <p className="font-medium">Start Detection</p>
+                    <p className="text-sm text-muted-foreground">AI will track your hand movements</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
@@ -297,8 +320,8 @@ export default function Practice() {
                     3
                   </div>
                   <div>
-                    <p className="font-medium">Get AI Feedback</p>
-                    <p className="text-sm text-muted-foreground">Review your results and keep practicing!</p>
+                    <p className="font-medium">Make Signs</p>
+                    <p className="text-sm text-muted-foreground">Get real-time feedback on your signs</p>
                   </div>
                 </div>
               </CardContent>
@@ -312,10 +335,10 @@ export default function Practice() {
                   Pro Tips
                 </h3>
                 <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li>• Ensure good lighting on your hands and face</li>
+                  <li>• Ensure good lighting on your hands</li>
                   <li>• Use a plain background when possible</li>
-                  <li>• Keep your hands in the camera frame</li>
-                  <li>• Practice each sign multiple times</li>
+                  <li>• Keep your hands fully in the frame</li>
+                  <li>• Move slowly for better detection</li>
                 </ul>
               </CardContent>
             </Card>
