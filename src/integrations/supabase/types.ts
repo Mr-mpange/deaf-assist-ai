@@ -217,6 +217,50 @@ export type Database = {
         }
         Relationships: []
       }
+      raised_hands: {
+        Row: {
+          answer_confidence: number | null
+          answer_sign: string | null
+          called_at: string | null
+          id: string
+          raised_at: string
+          session_id: string
+          status: string
+          student_id: string
+          student_name: string
+        }
+        Insert: {
+          answer_confidence?: number | null
+          answer_sign?: string | null
+          called_at?: string | null
+          id?: string
+          raised_at?: string
+          session_id: string
+          status?: string
+          student_id: string
+          student_name: string
+        }
+        Update: {
+          answer_confidence?: number | null
+          answer_sign?: string | null
+          called_at?: string | null
+          id?: string
+          raised_at?: string
+          session_id?: string
+          status?: string
+          student_id?: string
+          student_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raised_hands_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       submissions: {
         Row: {
           ai_prediction: Json | null

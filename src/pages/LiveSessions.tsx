@@ -30,10 +30,11 @@ import {
   PhoneOff,
   UserPlus
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { VideoTile } from '@/components/VideoTile';
+import { RaiseHandPanel } from '@/components/RaiseHandPanel';
+import { TeacherRaisedHandsPanel } from '@/components/TeacherRaisedHandsPanel';
 import { supabase } from '@/integrations/supabase/client';
 
 interface LiveSession {
@@ -54,11 +55,12 @@ export default function LiveSessions() {
   const [activeSession, setActiveSession] = useState<LiveSession | null>(null);
   const [sessions, setSessions] = useState<LiveSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [calledStudentId, setCalledStudentId] = useState<string | null>(null);
   
   const isTeacher = role === 'teacher' || role === 'admin';
+  const isHost = activeSession?.host_id === user?.id;
 
   const {
-    localStream,
     participants,
     isConnected,
     isMuted,
@@ -76,12 +78,62 @@ export default function LiveSessions() {
     roomId: activeSession?.id || '',
     userId: user?.id || '',
     userName: profile?.name || 'Anonymous',
-    isHost: activeSession?.host_id === user?.id,
+    isHost: isHost,
   });
 
   useEffect(() => {
     fetchSessions();
+    
+    // Subscribe to session updates
+    const channel = supabase
+      .channel('live-sessions-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'live_sessions',
+        },
+        () => fetchSessions()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  // Listen for when teacher calls on a student
+  useEffect(() => {
+    if (!activeSession || isHost) return;
+
+    const channel = supabase
+      .channel(`student-called-${activeSession.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'raised_hands',
+          filter: `session_id=eq.${activeSession.id}`,
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          if (newData.student_id === user?.id && newData.status === 'called') {
+            setCalledStudentId(user?.id || null);
+            toast({
+              title: "You've been called on!",
+              description: "Show your answer using sign language",
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeSession, isHost, user?.id]);
 
   const fetchSessions = async () => {
     setIsLoading(true);
@@ -142,7 +194,6 @@ export default function LiveSessions() {
     setNewSessionTitle('');
     setIsCreating(false);
     
-    // Start the call
     await startCall();
     
     toast({
@@ -159,7 +210,13 @@ export default function LiveSessions() {
   };
 
   const handleEndSession = async () => {
-    if (activeSession && activeSession.host_id === user?.id) {
+    if (activeSession && isHost) {
+      // Clean up raised hands
+      await supabase
+        .from('raised_hands')
+        .delete()
+        .eq('session_id', activeSession.id);
+
       await supabase
         .from('live_sessions')
         .update({ status: 'ended', ended_at: new Date().toISOString() })
@@ -168,7 +225,19 @@ export default function LiveSessions() {
     
     endCall();
     setActiveSession(null);
+    setCalledStudentId(null);
     fetchSessions();
+  };
+
+  const handleCallStudent = (studentId: string) => {
+    setCalledStudentId(studentId);
+  };
+
+  const handleAnswerSubmitted = (sign: string, confidence: number) => {
+    toast({
+      title: "Answer Received",
+      description: `Student answered: ${sign} (${Math.round(confidence * 100)}% confidence)`,
+    });
   };
 
   const liveSessions = sessions.filter(s => s.status === 'live');
@@ -192,101 +261,126 @@ export default function LiveSessions() {
             </Badge>
           </div>
 
-          {/* Video Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Screen Share (if active) */}
-            {isScreenSharing && screenStream && (
-              <div className="md:col-span-2 lg:col-span-2">
-                <VideoTile
-                  stream={screenStream}
-                  name="Screen Share"
-                  isScreenShare
-                  className="h-full"
-                />
-              </div>
-            )}
-            
-            {/* Participants */}
-            {participants.map((participant) => (
-              <VideoTile
-                key={participant.id}
-                stream={participant.stream}
-                name={participant.name}
-                isHost={participant.isHost}
-                isMuted={participant.id === user?.id ? isMuted : participant.isMuted}
-                isVideoOff={participant.id === user?.id ? isVideoOff : participant.isVideoOff}
-                isLocal={participant.id === user?.id}
-              />
-            ))}
-          </div>
-
-          {/* Controls */}
-          <Card className="border-border/50 shadow-card">
-            <CardContent className="p-4">
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Button
-                  variant={isMuted ? "destructive" : "outline"}
-                  size="lg"
-                  onClick={toggleMute}
-                >
-                  {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                </Button>
+          <div className="grid lg:grid-cols-4 gap-6">
+            {/* Main content area */}
+            <div className="lg:col-span-3 space-y-4">
+              {/* Video Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {isScreenSharing && screenStream && (
+                  <div className="md:col-span-2">
+                    <VideoTile
+                      stream={screenStream}
+                      name="Screen Share"
+                      isScreenShare
+                      className="h-full"
+                    />
+                  </div>
+                )}
                 
-                <Button
-                  variant={isVideoOff ? "destructive" : "outline"}
-                  size="lg"
-                  onClick={toggleVideo}
-                >
-                  {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
-                </Button>
-                
-                <Button
-                  variant={isScreenSharing ? "secondary" : "outline"}
-                  size="lg"
-                  onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-                >
-                  {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
-                </Button>
-
-                {/* Demo: Add participant button */}
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => addDemoParticipant(`Student ${participants.length}`)}
-                >
-                  <UserPlus className="w-5 h-5" />
-                </Button>
-                
-                <Button
-                  variant="destructive"
-                  size="lg"
-                  onClick={handleEndSession}
-                >
-                  <PhoneOff className="w-5 h-5 mr-2" />
-                  {activeSession.host_id === user?.id ? 'End Session' : 'Leave'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Participants List */}
-          <Card className="border-border/50 shadow-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Participants ({participants.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {participants.map((p) => (
-                  <Badge key={p.id} variant={p.isHost ? "default" : "secondary"}>
-                    {p.name} {p.isHost && '(Host)'}
-                  </Badge>
+                {participants.map((participant) => (
+                  <VideoTile
+                    key={participant.id}
+                    stream={participant.stream}
+                    name={participant.name}
+                    isHost={participant.isHost}
+                    isMuted={participant.id === user?.id ? isMuted : participant.isMuted}
+                    isVideoOff={participant.id === user?.id ? isVideoOff : participant.isVideoOff}
+                    isLocal={participant.id === user?.id}
+                  />
                 ))}
               </div>
-            </CardContent>
-          </Card>
+
+              {/* Controls */}
+              <Card className="border-border/50 shadow-card">
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <Button
+                      variant={isMuted ? "destructive" : "outline"}
+                      size="lg"
+                      onClick={toggleMute}
+                    >
+                      {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </Button>
+                    
+                    <Button
+                      variant={isVideoOff ? "destructive" : "outline"}
+                      size="lg"
+                      onClick={toggleVideo}
+                    >
+                      {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+                    </Button>
+                    
+                    <Button
+                      variant={isScreenSharing ? "secondary" : "outline"}
+                      size="lg"
+                      onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+                    >
+                      {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => addDemoParticipant(`Student ${participants.length}`)}
+                    >
+                      <UserPlus className="w-5 h-5" />
+                    </Button>
+                    
+                    <Button
+                      variant="destructive"
+                      size="lg"
+                      onClick={handleEndSession}
+                    >
+                      <PhoneOff className="w-5 h-5 mr-2" />
+                      {isHost ? 'End Session' : 'Leave'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Sidebar */}
+            <div className="space-y-4">
+              {/* Teacher: Raised Hands Panel */}
+              {isHost && (
+                <TeacherRaisedHandsPanel
+                  sessionId={activeSession.id}
+                  onCallStudent={handleCallStudent}
+                />
+              )}
+
+              {/* Student: Raise Hand Panel */}
+              {!isHost && user && profile && (
+                <RaiseHandPanel
+                  sessionId={activeSession.id}
+                  studentId={user.id}
+                  studentName={profile.name}
+                  isCalledOn={calledStudentId === user.id}
+                  onAnswerSubmitted={handleAnswerSubmitted}
+                  onLowerHand={() => setCalledStudentId(null)}
+                />
+              )}
+
+              {/* Participants List */}
+              <Card className="border-border/50 shadow-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Participants ({participants.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {participants.map((p) => (
+                      <Badge key={p.id} variant={p.isHost ? "default" : "secondary"}>
+                        {p.name} {p.isHost && '(Host)'}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -457,13 +551,13 @@ export default function LiveSessions() {
                 <h3 className="font-semibold mb-1">Live Session Features</h3>
                 <p className="text-sm text-muted-foreground">
                   Join live classes to interact with instructors in real-time. 
-                  Ask questions, practice signs, and get immediate feedback.
+                  Raise your hand to answer questions using sign language!
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">Video Chat</Badge>
                 <Badge variant="secondary">Screen Share</Badge>
-                <Badge variant="secondary">Q&A</Badge>
+                <Badge variant="secondary">Sign Language Q&A</Badge>
               </div>
             </div>
           </CardContent>
