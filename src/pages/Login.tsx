@@ -26,17 +26,6 @@ export default function Login() {
     setIsSubmitting(false);
   };
 
-  // Demo accounts
-  const demoAccounts = [
-    { email: 'admin@deaflearn.app', password: 'admin123', role: 'Admin' },
-    { email: 'sarah@deaflearn.app', password: 'teacher123', role: 'Teacher' },
-    { email: 'emily@student.com', password: 'student123', role: 'Student' },
-  ];
-
-  const fillDemo = (email: string, password: string) => {
-    setEmail(email);
-    setPassword(password);
-  };
 
   return (
     <div className="min-h-screen flex">
@@ -109,22 +98,6 @@ export default function Login() {
             </Button>
           </form>
 
-          {/* Demo Accounts */}
-          <div className="pt-6 border-t border-border">
-            <p className="text-sm text-muted-foreground mb-3">Try demo accounts:</p>
-            <div className="flex flex-wrap gap-2">
-              {demoAccounts.map((account) => (
-                <button
-                  key={account.email}
-                  type="button"
-                  onClick={() => fillDemo(account.email, account.password)}
-                  className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 transition-colors"
-                >
-                  {account.role}
-                </button>
-              ))}
-            </div>
-          </div>
 
           <p className="text-center text-muted-foreground">
             Don't have an account?{' '}
