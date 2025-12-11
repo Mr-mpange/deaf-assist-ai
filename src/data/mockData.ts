@@ -5,7 +5,6 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  password: string;
   role: 'student' | 'teacher' | 'admin';
   avatar?: string;
   createdAt: string;
@@ -58,7 +57,6 @@ export const mockUsers: User[] = [
     id: '1',
     name: 'Admin User',
     email: 'admin@deaflearn.app',
-    password: 'admin123',
     role: 'admin',
     createdAt: '2024-01-01T00:00:00Z',
   },
@@ -66,7 +64,6 @@ export const mockUsers: User[] = [
     id: '2',
     name: 'Sarah Johnson',
     email: 'sarah@deaflearn.app',
-    password: 'teacher123',
     role: 'teacher',
     createdAt: '2024-01-15T00:00:00Z',
   },
@@ -74,7 +71,6 @@ export const mockUsers: User[] = [
     id: '3',
     name: 'Michael Chen',
     email: 'michael@deaflearn.app',
-    password: 'teacher123',
     role: 'teacher',
     createdAt: '2024-02-01T00:00:00Z',
   },
@@ -82,7 +78,6 @@ export const mockUsers: User[] = [
     id: '4',
     name: 'Emily Davis',
     email: 'emily@student.com',
-    password: 'student123',
     role: 'student',
     createdAt: '2024-03-01T00:00:00Z',
   },
@@ -90,7 +85,6 @@ export const mockUsers: User[] = [
     id: '5',
     name: 'James Wilson',
     email: 'james@student.com',
-    password: 'student123',
     role: 'student',
     createdAt: '2024-03-10T00:00:00Z',
   },
