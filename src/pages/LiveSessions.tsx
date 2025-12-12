@@ -38,6 +38,7 @@ import { VideoTile } from '@/components/VideoTile';
 import { RaiseHandPanel } from '@/components/RaiseHandPanel';
 import { TeacherRaisedHandsPanel } from '@/components/TeacherRaisedHandsPanel';
 import { SessionRecordings } from '@/components/SessionRecordings';
+import { SignToCommunicate } from '@/components/SignToCommunicate';
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -439,6 +440,9 @@ export default function LiveSessions() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Sign to Communicate - for all users */}
+              <SignToCommunicate className="max-h-[500px]" />
             </div>
           </div>
         </div>

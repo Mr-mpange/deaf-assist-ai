@@ -8,15 +8,14 @@ import {
   Video,
   Users,
   BarChart3,
-  Settings,
   LogOut,
-  Play,
   Upload,
   Camera,
   Radio,
   GraduationCap,
   ChevronLeft,
   ChevronRight,
+  MessageSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -30,10 +29,10 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Dashboard', icon: Home, href: '/dashboard', roles: ['student', 'teacher', 'admin'] },
   { label: 'Lessons', icon: BookOpen, href: '/lessons', roles: ['student', 'teacher', 'admin'] },
-  { label: 'Practice', icon: Camera, href: '/practice', roles: ['student'] },
-  { label: 'Live Sessions', icon: Radio, href: '/live', roles: ['student', 'teacher'] },
-  { label: 'My Uploads', icon: Upload, href: '/uploads', roles: ['teacher'] },
-  { label: 'Submissions', icon: Video, href: '/submissions', roles: ['teacher'] },
+  { label: 'Practice', icon: Camera, href: '/practice', roles: ['student', 'teacher', 'admin'] },
+  { label: 'Live Sessions', icon: Radio, href: '/live', roles: ['student', 'teacher', 'admin'] },
+  { label: 'My Uploads', icon: Upload, href: '/uploads', roles: ['teacher', 'admin'] },
+  { label: 'Submissions', icon: Video, href: '/submissions', roles: ['teacher', 'admin'] },
   { label: 'Users', icon: Users, href: '/admin/users', roles: ['admin'] },
   { label: 'Analytics', icon: BarChart3, href: '/admin/analytics', roles: ['admin'] },
 ];
@@ -55,6 +54,14 @@ export function Sidebar() {
       case 'admin': return 'bg-destructive/10 text-destructive';
       case 'teacher': return 'bg-secondary/20 text-secondary-foreground';
       default: return 'bg-primary/10 text-primary';
+    }
+  };
+
+  const getRoleLabel = () => {
+    switch (userRole) {
+      case 'admin': return 'Administrator';
+      case 'teacher': return 'Teacher';
+      default: return 'Student';
     }
   };
 
@@ -93,8 +100,8 @@ export function Sidebar() {
           {!collapsed && (
             <div className="flex-1 min-w-0 animate-fade-in">
               <p className="font-medium text-sidebar-foreground truncate">{userName}</p>
-              <span className={cn("text-xs px-2 py-0.5 rounded-full capitalize", getRoleColor())}>
-                {userRole}
+              <span className={cn("text-xs px-2 py-0.5 rounded-full", getRoleColor())}>
+                {getRoleLabel()}
               </span>
             </div>
           )}
@@ -148,7 +155,7 @@ export function Sidebar() {
           onClick={logout}
         >
           <LogOut className="w-5 h-5" />
-          {!collapsed && <span>Logout</span>}
+          {!collapsed && <span className="ml-3">Logout</span>}
         </Button>
       </div>
 

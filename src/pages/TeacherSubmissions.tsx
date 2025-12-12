@@ -28,12 +28,13 @@ import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 
 export default function TeacherSubmissions() {
-  const { user } = useAuth();
+  const { role } = useAuth();
   const { toast } = useToast();
   const [selectedSubmission, setSelectedSubmission] = useState<typeof mockSubmissions[0] | null>(null);
   const [feedback, setFeedback] = useState('');
 
-  if (user?.role !== 'teacher' && user?.role !== 'admin') {
+  // Role protection is handled by the route, but double-check here
+  if (role !== 'teacher' && role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 

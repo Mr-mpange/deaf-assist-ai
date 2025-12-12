@@ -31,9 +31,10 @@ import {
 const COLORS = ['hsl(175, 70%, 35%)', 'hsl(35, 90%, 55%)', 'hsl(15, 80%, 60%)', 'hsl(200, 85%, 50%)'];
 
 export default function AdminAnalytics() {
-  const { user } = useAuth();
+  const { role } = useAuth();
 
-  if (user?.role !== 'admin') {
+  // Role protection is handled by the route, but double-check here
+  if (role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 

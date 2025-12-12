@@ -37,11 +37,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 
 export default function AdminUsers() {
-  const { user } = useAuth();
+  const { role } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
 
-  if (user?.role !== 'admin') {
+  // Role protection is handled by the route, but double-check here
+  if (role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
