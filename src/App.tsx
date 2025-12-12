@@ -41,6 +41,37 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Role-based Protected Route wrapper
+function RoleProtectedRoute({ 
+  children, 
+  allowedRoles 
+}: { 
+  children: React.ReactNode;
+  allowedRoles: ('admin' | 'teacher' | 'student')[];
+}) {
+  const { isAuthenticated, isLoading, role } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // Check role access
+  const userRole = role || 'student';
+  if (!allowedRoles.includes(userRole)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
 // Public Route wrapper (redirects to dashboard if logged in)
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -68,7 +99,7 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
       
-      {/* Protected Routes */}
+      {/* Protected Routes - All authenticated users */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/lessons" element={<ProtectedRoute><Lessons /></ProtectedRoute>} />
       <Route path="/lessons/:id" element={<ProtectedRoute><LessonDetail /></ProtectedRoute>} />
@@ -76,12 +107,28 @@ function AppRoutes() {
       <Route path="/live" element={<ProtectedRoute><LiveSessions /></ProtectedRoute>} />
       
       {/* Teacher Routes */}
-      <Route path="/uploads" element={<ProtectedRoute><TeacherUploads /></ProtectedRoute>} />
-      <Route path="/submissions" element={<ProtectedRoute><TeacherSubmissions /></ProtectedRoute>} />
+      <Route path="/uploads" element={
+        <RoleProtectedRoute allowedRoles={['teacher', 'admin']}>
+          <TeacherUploads />
+        </RoleProtectedRoute>
+      } />
+      <Route path="/submissions" element={
+        <RoleProtectedRoute allowedRoles={['teacher', 'admin']}>
+          <TeacherSubmissions />
+        </RoleProtectedRoute>
+      } />
       
       {/* Admin Routes */}
-      <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
-      <Route path="/admin/analytics" element={<ProtectedRoute><AdminAnalytics /></ProtectedRoute>} />
+      <Route path="/admin/users" element={
+        <RoleProtectedRoute allowedRoles={['admin']}>
+          <AdminUsers />
+        </RoleProtectedRoute>
+      } />
+      <Route path="/admin/analytics" element={
+        <RoleProtectedRoute allowedRoles={['admin']}>
+          <AdminAnalytics />
+        </RoleProtectedRoute>
+      } />
       
       {/* Catch all */}
       <Route path="*" element={<NotFound />} />

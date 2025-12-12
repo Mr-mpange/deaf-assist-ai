@@ -3,21 +3,22 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Camera, 
   CameraOff, 
-  Play, 
   RefreshCw,
   Sparkles,
   CheckCircle2,
-  Info,
   Hand,
-  Loader2
+  Loader2,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useProgress } from '@/hooks/useProgress';
 import { useHandDetection, classifySign } from '@/hooks/useHandDetection';
+import { SignToCommunicate } from '@/components/SignToCommunicate';
 
 export default function Practice() {
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -143,7 +144,7 @@ export default function Practice() {
             Practice Mode
           </h1>
           <p className="text-muted-foreground mt-1">
-            Practice sign language with AI-powered hand detection
+            Practice sign language with AI-powered hand detection and communicate using signs
           </p>
         </div>
 
@@ -155,7 +156,20 @@ export default function Practice() {
           </Card>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <Tabs defaultValue="practice" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="practice" className="flex items-center gap-2">
+              <Hand className="w-4 h-4" />
+              Practice Signs
+            </TabsTrigger>
+            <TabsTrigger value="communicate" className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" />
+              Communicate
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="practice" className="mt-6">
+            <div className="grid lg:grid-cols-3 gap-6">
           {/* Camera View */}
           <div className="lg:col-span-2 space-y-4">
             <Card className="border-border/50 shadow-card overflow-hidden">
@@ -344,6 +358,60 @@ export default function Practice() {
             </Card>
           </div>
         </div>
+          </TabsContent>
+
+          <TabsContent value="communicate" className="mt-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <SignToCommunicate />
+              
+              <Card className="border-border/50 shadow-card">
+                <CardHeader>
+                  <CardTitle className="text-lg">How to Communicate</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
+                      1
+                    </div>
+                    <div>
+                      <p className="font-medium">Start Camera</p>
+                      <p className="text-sm text-muted-foreground">Enable your camera to begin</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
+                      2
+                    </div>
+                    <div>
+                      <p className="font-medium">Sign Letters</p>
+                      <p className="text-sm text-muted-foreground">Hold each letter steady to build words</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium shrink-0">
+                      3
+                    </div>
+                    <div>
+                      <p className="font-medium">Speak Out</p>
+                      <p className="text-sm text-muted-foreground">Click the speaker icon to vocalize your message</p>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-primary/5 rounded-lg">
+                    <h4 className="font-medium mb-2">Supported Signs</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {['A-Z', 'Numbers 0-10', 'HELLO', 'THANK YOU', 'YES', 'NO', 'PLEASE', 'SORRY', 'HELP'].map((sign) => (
+                        <Badge key={sign} variant="secondary" className="text-xs">
+                          {sign}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

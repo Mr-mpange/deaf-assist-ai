@@ -38,7 +38,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 
 export default function TeacherUploads() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -49,7 +49,8 @@ export default function TeacherUploads() {
     difficulty: '',
   });
 
-  if (user?.role !== 'teacher' && user?.role !== 'admin') {
+  // Role protection is handled by the route, but double-check here
+  if (role !== 'teacher' && role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
