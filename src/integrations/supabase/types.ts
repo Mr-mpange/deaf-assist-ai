@@ -261,6 +261,50 @@ export type Database = {
           },
         ]
       }
+      session_recordings: {
+        Row: {
+          created_at: string
+          duration: number | null
+          id: string
+          recorded_at: string
+          recording_url: string | null
+          session_id: string
+          status: string
+          thumbnail_url: string | null
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          duration?: number | null
+          id?: string
+          recorded_at?: string
+          recording_url?: string | null
+          session_id: string
+          status?: string
+          thumbnail_url?: string | null
+          title: string
+        }
+        Update: {
+          created_at?: string
+          duration?: number | null
+          id?: string
+          recorded_at?: string
+          recording_url?: string | null
+          session_id?: string
+          status?: string
+          thumbnail_url?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_recordings_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       submissions: {
         Row: {
           ai_prediction: Json | null

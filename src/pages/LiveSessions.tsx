@@ -28,13 +28,17 @@ import {
   Monitor,
   MonitorOff,
   PhoneOff,
-  UserPlus
+  UserPlus,
+  Circle,
+  StopCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { VideoTile } from '@/components/VideoTile';
 import { RaiseHandPanel } from '@/components/RaiseHandPanel';
 import { TeacherRaisedHandsPanel } from '@/components/TeacherRaisedHandsPanel';
+import { SessionRecordings } from '@/components/SessionRecordings';
+import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
 
 interface LiveSession {
@@ -67,6 +71,7 @@ export default function LiveSessions() {
     isVideoOff,
     isScreenSharing,
     screenStream,
+    localStream,
     startCall,
     endCall,
     toggleMute,
@@ -79,6 +84,17 @@ export default function LiveSessions() {
     userId: user?.id || '',
     userName: profile?.name || 'Anonymous',
     isHost: isHost,
+  });
+
+  const {
+    isRecording,
+    formattedDuration,
+    startRecording,
+    stopRecording,
+  } = useSessionRecording({
+    sessionId: activeSession?.id || '',
+    sessionTitle: activeSession?.title || '',
+    hostId: user?.id || '',
   });
 
   useEffect(() => {
@@ -194,12 +210,21 @@ export default function LiveSessions() {
     setNewSessionTitle('');
     setIsCreating(false);
     
-    await startCall();
+    const callStarted = await startCall();
     
     toast({
       title: "Session Created",
       description: `"${data.title}" is now live!`,
     });
+
+    // Auto-start recording for the session
+    if (callStarted && localStream) {
+      setTimeout(() => {
+        if (localStream) {
+          startRecording(localStream);
+        }
+      }, 1000);
+    }
     
     fetchSessions();
   };
@@ -210,6 +235,11 @@ export default function LiveSessions() {
   };
 
   const handleEndSession = async () => {
+    // Stop recording first
+    if (isRecording) {
+      await stopRecording();
+    }
+
     if (activeSession && isHost) {
       // Clean up raised hands
       await supabase
@@ -227,6 +257,14 @@ export default function LiveSessions() {
     setActiveSession(null);
     setCalledStudentId(null);
     fetchSessions();
+  };
+
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else if (localStream) {
+      await startRecording(localStream);
+    }
   };
 
   const handleCallStudent = (studentId: string) => {
@@ -325,6 +363,28 @@ export default function LiveSessions() {
                     >
                       <UserPlus className="w-5 h-5" />
                     </Button>
+
+                    {/* Recording button - host only */}
+                    {isHost && (
+                      <Button
+                        variant={isRecording ? "destructive" : "outline"}
+                        size="lg"
+                        onClick={handleToggleRecording}
+                        className="relative"
+                      >
+                        {isRecording ? (
+                          <>
+                            <StopCircle className="w-5 h-5 mr-2" />
+                            <span className="animate-pulse">{formattedDuration}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Circle className="w-5 h-5 mr-2 fill-destructive text-destructive" />
+                            Record
+                          </>
+                        )}
+                      </Button>
+                    )}
                     
                     <Button
                       variant="destructive"
@@ -543,6 +603,9 @@ export default function LiveSessions() {
           )}
         </div>
 
+        {/* Past Recordings */}
+        <SessionRecordings />
+
         {/* Info Card */}
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="p-6">
@@ -551,13 +614,15 @@ export default function LiveSessions() {
                 <h3 className="font-semibold mb-1">Live Session Features</h3>
                 <p className="text-sm text-muted-foreground">
                   Join live classes to interact with instructors in real-time. 
-                  Raise your hand to answer questions using sign language!
+                  Raise your hand to answer questions using sign language! 
+                  Missed a session? Watch the recording below.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">Video Chat</Badge>
                 <Badge variant="secondary">Screen Share</Badge>
                 <Badge variant="secondary">Sign Language Q&A</Badge>
+                <Badge variant="secondary">Auto Recording</Badge>
               </div>
             </div>
           </CardContent>
