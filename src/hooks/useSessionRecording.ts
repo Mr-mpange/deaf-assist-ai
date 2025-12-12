@@ -12,6 +12,7 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
   const [isRecording, setIsRecording] = useState(false);
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -21,6 +22,8 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
   const startTimeRef = useRef<number>(0);
 
   const startRecording = useCallback(async (stream: MediaStream) => {
+    if (!sessionId) return false;
+    
     try {
       // Create recording entry in database
       const { data: recording, error } = await supabase
@@ -42,14 +45,16 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
       stream.getTracks().forEach(track => combinedStream.addTrack(track.clone()));
       streamRef.current = combinedStream;
 
-      // Set up MediaRecorder
+      // Set up MediaRecorder with supported codec
       const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
         ? 'video/webm;codecs=vp9,opus'
+        : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+        ? 'video/webm;codecs=vp8,opus'
         : 'video/webm';
 
       const mediaRecorder = new MediaRecorder(combinedStream, {
         mimeType,
-        videoBitsPerSecond: 2500000, // 2.5 Mbps
+        videoBitsPerSecond: 2500000,
       });
 
       chunksRef.current = [];
@@ -66,19 +71,18 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
       };
 
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start(1000); // Collect data every second
+      mediaRecorder.start(1000);
 
       startTimeRef.current = Date.now();
       setIsRecording(true);
 
-      // Track duration
       durationIntervalRef.current = setInterval(() => {
         setRecordingDuration(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 1000);
 
       toast({
         title: "Recording Started",
-        description: "Session is now being recorded for students who couldn't attend",
+        description: "Session is being recorded for students who can't attend",
       });
 
       return true;
@@ -94,33 +98,44 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
   }, [sessionId, sessionTitle, toast]);
 
   const saveRecording = useCallback(async (blob: Blob, recId: string) => {
-    try {
-      // For demo purposes, we'll create an object URL
-      // In production, you'd upload to Supabase Storage
-      const recordingUrl = URL.createObjectURL(blob);
-      const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
+    setIsUploading(true);
+    const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
-      // Update recording status
-      await supabase
+    try {
+      // Generate unique filename
+      const fileName = `${sessionId}/${recId}-${Date.now()}.webm`;
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('session-recordings')
+        .upload(fileName, blob, {
+          contentType: 'video/webm',
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('session-recordings')
+        .getPublicUrl(fileName);
+
+      // Update recording with URL and duration
+      const { error: updateError } = await supabase
         .from('session_recordings')
         .update({
           status: 'completed',
           duration,
-          // In production: recording_url would be the Supabase Storage URL
+          recording_url: urlData.publicUrl,
         })
         .eq('id', recId);
 
+      if (updateError) throw updateError;
+
       toast({
         title: "Recording Saved",
-        description: `Recording saved (${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')})`,
+        description: `Recording uploaded (${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')})`,
       });
-
-      // Store locally for demo viewing
-      if (typeof window !== 'undefined') {
-        const recordings = JSON.parse(localStorage.getItem('session_recordings') || '{}');
-        recordings[recId] = recordingUrl;
-        localStorage.setItem('session_recordings', JSON.stringify(recordings));
-      }
     } catch (err) {
       console.error('Failed to save recording:', err);
       
@@ -128,8 +143,16 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
         .from('session_recordings')
         .update({ status: 'failed' })
         .eq('id', recId);
+
+      toast({
+        title: "Upload Failed",
+        description: "Recording could not be saved to cloud",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
     }
-  }, [toast]);
+  }, [sessionId, toast]);
 
   const stopRecording = useCallback(async () => {
     if (durationIntervalRef.current) {
@@ -158,6 +181,7 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
 
   return {
     isRecording,
+    isUploading,
     recordingId,
     recordingDuration,
     formattedDuration: formatDuration(recordingDuration),

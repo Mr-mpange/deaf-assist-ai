@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Play, Clock, Calendar, Video, Loader2 } from 'lucide-react';
+import { Play, Clock, Calendar, Video, Loader2, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -13,13 +13,13 @@ interface Recording {
   recorded_at: string;
   status: string;
   session_id: string;
+  recording_url: string | null;
 }
 
 export function SessionRecordings() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRecordings();
@@ -57,14 +57,7 @@ export function SessionRecordings() {
   };
 
   const playRecording = (recording: Recording) => {
-    // Get from local storage for demo
-    const storedRecordings = JSON.parse(localStorage.getItem('session_recordings') || '{}');
-    const url = storedRecordings[recording.id];
-    
-    if (url) {
-      setVideoUrl(url);
-      setSelectedRecording(recording);
-    }
+    setSelectedRecording(recording);
   };
 
   const formatDuration = (seconds: number) => {
@@ -134,14 +127,28 @@ export function SessionRecordings() {
                       </div>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => playRecording(recording)}
-                  >
-                    <Play className="w-4 h-4 mr-1" />
-                    Watch
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {recording.recording_url && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                      >
+                        <a href={recording.recording_url} download target="_blank" rel="noopener noreferrer">
+                          <Download className="w-4 h-4" />
+                        </a>
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => playRecording(recording)}
+                      disabled={!recording.recording_url}
+                    >
+                      <Play className="w-4 h-4 mr-1" />
+                      Watch
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -155,9 +162,9 @@ export function SessionRecordings() {
             <DialogTitle>{selectedRecording?.title}</DialogTitle>
           </DialogHeader>
           <div className="aspect-video bg-black rounded-lg overflow-hidden">
-            {videoUrl ? (
+            {selectedRecording?.recording_url ? (
               <video
-                src={videoUrl}
+                src={selectedRecording.recording_url}
                 controls
                 autoPlay
                 className="w-full h-full"
@@ -166,8 +173,7 @@ export function SessionRecordings() {
               <div className="w-full h-full flex items-center justify-center text-white/50">
                 <div className="text-center">
                   <Video className="w-12 h-12 mx-auto mb-2" />
-                  <p>Recording not available in demo mode</p>
-                  <p className="text-sm mt-1">In production, recordings are stored in cloud storage</p>
+                  <p>Recording not available</p>
                 </div>
               </div>
             )}
