@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
-import { mockLessons } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
+import type { Tables } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { 
   Upload, 
   Plus, 
@@ -32,7 +43,9 @@ import {
   Trash2,
   Clock,
   FileVideo,
-  Loader2
+  Loader2,
+  Save,
+  X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
@@ -42,19 +55,144 @@ export default function TeacherUploads() {
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingLesson, setEditingLesson] = useState<any>(null);
+  const [deletingLesson, setDeletingLesson] = useState<any>(null);
+  const [lessons, setLessons] = useState<Tables<'lessons'>[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     category: '',
     difficulty: '',
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Role protection is handled by the route, but double-check here
   if (role !== 'teacher' && role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const myLessons = mockLessons.filter(l => l.authorId === user?.id || l.authorId === '2');
+  // Load lessons from database
+  useEffect(() => {
+    const loadLessons = async () => {
+      if (!user?.id) return;
+      
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('author_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error loading lessons:', error);
+          toast({
+            title: "Error Loading Lessons",
+            description: "Failed to load your lessons. Please try again.",
+            variant: "destructive",
+          });
+        } else {
+          setLessons(data || []);
+        }
+      } catch (error) {
+        console.error('Error loading lessons:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadLessons();
+  }, [user?.id, toast]);
+
+  const handleFileSelect = (file: File) => {
+    if (file && file.type.startsWith('video/')) {
+      setSelectedFile(file);
+      toast({
+        title: "Video Selected",
+        description: `Selected: ${file.name}`,
+      });
+    } else {
+      toast({
+        title: "Invalid File",
+        description: "Please select a valid video file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      handleFileSelect(files[0]);
+    }
+  };
+
+  const uploadVideoToStorage = async (file: File): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
+      
+      // Try to upload to lesson-videos bucket
+      let { data, error } = await supabase.storage
+        .from('lesson-videos')
+        .upload(fileName, file, {
+          contentType: file.type,
+          upsert: false
+        });
+
+      // If bucket doesn't exist, try session-recordings as fallback
+      if (error && error.message.includes('bucket')) {
+        console.log('lesson-videos bucket not found, using session-recordings as fallback');
+        const fallbackFileName = `lessons/${fileName}`;
+        const result = await supabase.storage
+          .from('session-recordings')
+          .upload(fallbackFileName, file, {
+            contentType: file.type,
+            upsert: false
+          });
+        
+        data = result.data;
+        error = result.error;
+        
+        if (!error && data) {
+          // Get public URL from session-recordings bucket
+          const { data: urlData } = supabase.storage
+            .from('session-recordings')
+            .getPublicUrl(fallbackFileName);
+          return urlData.publicUrl;
+        }
+      }
+
+      if (error) {
+        console.error('Upload error:', error);
+        return null;
+      }
+
+      // Get public URL from lesson-videos bucket
+      const { data: urlData } = supabase.storage
+        .from('lesson-videos')
+        .getPublicUrl(fileName);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Upload error:', error);
+      return null;
+    }
+  };
 
   const handleUpload = async () => {
     if (!formData.title || !formData.category || !formData.difficulty) {
@@ -66,19 +204,183 @@ export default function TeacherUploads() {
       return;
     }
 
+    if (!selectedFile && !editingLesson) {
+      toast({
+        title: "No Video Selected",
+        description: "Please select a video file to upload",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!user?.id) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to upload lessons",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsUploading(true);
     
-    // Simulate upload
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    toast({
-      title: "Lesson Uploaded",
-      description: `"${formData.title}" has been published successfully!`,
+    try {
+      if (editingLesson) {
+        // Update existing lesson
+        let videoUrl = editingLesson.video_url;
+        
+        // Upload new video if selected
+        if (selectedFile) {
+          const uploadedUrl = await uploadVideoToStorage(selectedFile);
+          if (!uploadedUrl) {
+            throw new Error('Failed to upload video');
+          }
+          videoUrl = uploadedUrl;
+        }
+
+        const { data, error } = await supabase
+          .from('lessons')
+          .update({
+            title: formData.title,
+            description: formData.description || null,
+            category: formData.category,
+            difficulty: formData.difficulty,
+            video_url: videoUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingLesson.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Update local state
+        setLessons(lessons.map(lesson => 
+          lesson.id === editingLesson.id ? data : lesson
+        ));
+        
+        toast({
+          title: "Lesson Updated",
+          description: `"${formData.title}" has been updated successfully!`,
+        });
+      } else {
+        // Create new lesson
+        let videoUrl: string | null = null;
+        
+        if (selectedFile) {
+          videoUrl = await uploadVideoToStorage(selectedFile);
+          if (!videoUrl) {
+            throw new Error('Failed to upload video');
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('lessons')
+          .insert({
+            title: formData.title,
+            description: formData.description || null,
+            category: formData.category,
+            difficulty: formData.difficulty,
+            author_id: user.id,
+            video_url: videoUrl,
+            duration: Math.floor(Math.random() * 30) + 5, // Placeholder duration
+            views: 0,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        // Update local state
+        setLessons([data, ...lessons]);
+        
+        toast({
+          title: "Lesson Uploaded",
+          description: `"${formData.title}" has been published successfully!${selectedFile ? ` Video: ${selectedFile.name}` : ''}`,
+        });
+      }
+      
+      setFormData({ title: '', description: '', category: '', difficulty: '' });
+      setEditingLesson(null);
+      setSelectedFile(null);
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : "Failed to save lesson. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleEdit = (lesson: Tables<'lessons'>) => {
+    setEditingLesson(lesson);
+    setFormData({
+      title: lesson.title,
+      description: lesson.description || '',
+      category: lesson.category,
+      difficulty: lesson.difficulty,
     });
-    
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = async (lesson: Tables<'lessons'>) => {
+    try {
+      // Delete video from storage if it exists
+      if (lesson.video_url) {
+        const urlParts = lesson.video_url.split('/');
+        const fileName = urlParts[urlParts.length - 1];
+        if (fileName) {
+          // Try lesson-videos bucket first
+          let { error } = await supabase.storage
+            .from('lesson-videos')
+            .remove([`${lesson.author_id}/${fileName}`]);
+          
+          // If not found, try session-recordings bucket
+          if (error) {
+            await supabase.storage
+              .from('session-recordings')
+              .remove([`lessons/${lesson.author_id}/${fileName}`]);
+          }
+        }
+      }
+
+      // Delete lesson from database
+      const { error } = await supabase
+        .from('lessons')
+        .delete()
+        .eq('id', lesson.id);
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedLessons = lessons.filter(l => l.id !== lesson.id);
+      setLessons(updatedLessons);
+      
+      toast({
+        title: "Lesson Deleted",
+        description: `"${lesson.title}" has been deleted successfully.`,
+      });
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete lesson. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingLesson(null);
+    }
+  };
+
+  const resetForm = () => {
     setFormData({ title: '', description: '', category: '', difficulty: '' });
-    setIsUploading(false);
-    setIsDialogOpen(false);
+    setEditingLesson(null);
+    setSelectedFile(null);
+    setIsDragOver(false);
   };
 
   return (
@@ -96,7 +398,10 @@ export default function TeacherUploads() {
             </p>
           </div>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            setIsDialogOpen(open);
+            if (!open) resetForm();
+          }}>
             <DialogTrigger asChild>
               <Button variant="gradient">
                 <Plus className="w-4 h-4 mr-2" />
@@ -105,22 +410,58 @@ export default function TeacherUploads() {
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader>
-                <DialogTitle>Upload New Lesson</DialogTitle>
+                <DialogTitle>
+                  {editingLesson ? 'Edit Lesson' : 'Upload New Lesson'}
+                </DialogTitle>
                 <DialogDescription>
-                  Create a new lesson for your students
+                  {editingLesson ? 'Update your lesson details' : 'Create a new lesson for your students'}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 {/* Video Upload Area */}
-                <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                  <FileVideo className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-                  <p className="font-medium">Drop video file here</p>
-                  <p className="text-sm text-muted-foreground">or click to browse</p>
+                <div 
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
+                    isDragOver 
+                      ? 'border-primary bg-primary/5' 
+                      : selectedFile 
+                        ? 'border-green-500 bg-green-50 dark:bg-green-950/20' 
+                        : 'border-border hover:border-primary/50'
+                  }`}
+                  onClick={() => document.getElementById('video-upload')?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <FileVideo className={`w-12 h-12 mx-auto mb-4 ${
+                    selectedFile ? 'text-green-500' : 'text-muted-foreground/50'
+                  }`} />
+                  {selectedFile ? (
+                    <>
+                      <p className="font-medium text-green-700 dark:text-green-400">
+                        {selectedFile.name}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Click to select a different file
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium">Drop video file here</p>
+                      <p className="text-sm text-muted-foreground">or click to browse</p>
+                    </>
+                  )}
                   <Input 
                     type="file" 
                     accept="video/*" 
                     className="hidden" 
                     id="video-upload"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileSelect(file);
+                    }}
                   />
                 </div>
 
@@ -182,45 +523,91 @@ export default function TeacherUploads() {
                   </div>
                 </div>
 
-                <Button 
-                  className="w-full" 
-                  variant="gradient"
-                  onClick={handleUpload}
-                  disabled={isUploading}
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Publish Lesson
-                    </>
-                  )}
-                </Button>
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => setIsDialogOpen(false)}
+                    disabled={isUploading}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="flex-1" 
+                    variant="gradient"
+                    onClick={handleUpload}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {editingLesson ? 'Updating...' : 'Uploading...'}
+                      </>
+                    ) : (
+                      <>
+                        {editingLesson ? (
+                          <>
+                            <Save className="w-4 h-4 mr-2" />
+                            Update Lesson
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" />
+                            Publish Lesson
+                          </>
+                        )}
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
         </div>
 
         {/* Lessons Grid */}
-        {myLessons.length > 0 ? (
+        {isLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {myLessons.map((lesson) => (
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="border-border/50 shadow-card overflow-hidden">
+                <div className="aspect-video bg-muted animate-pulse" />
+                <CardContent className="p-4 space-y-3">
+                  <div className="h-4 bg-muted animate-pulse rounded" />
+                  <div className="h-3 bg-muted animate-pulse rounded w-2/3" />
+                  <div className="flex gap-4">
+                    <div className="h-3 bg-muted animate-pulse rounded w-16" />
+                    <div className="h-3 bg-muted animate-pulse rounded w-12" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : lessons.length > 0 ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {lessons.map((lesson) => (
               <Card key={lesson.id} className="border-border/50 shadow-card overflow-hidden group">
                 <div className="relative aspect-video">
                   <img
-                    src={lesson.thumbnailUrl}
+                    src={lesson.thumbnail_url || '/placeholder.svg'}
                     alt={lesson.title}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <Button size="icon" variant="secondary">
+                    <Button 
+                      size="icon" 
+                      variant="secondary"
+                      onClick={() => handleEdit(lesson)}
+                      title="Edit lesson"
+                    >
                       <Edit2 className="w-4 h-4" />
                     </Button>
-                    <Button size="icon" variant="destructive">
+                    <Button 
+                      size="icon" 
+                      variant="destructive"
+                      onClick={() => setDeletingLesson(lesson)}
+                      title="Delete lesson"
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -230,6 +617,11 @@ export default function TeacherUploads() {
                     <div>
                       <h3 className="font-semibold line-clamp-1">{lesson.title}</h3>
                       <p className="text-sm text-muted-foreground">{lesson.category}</p>
+                      {lesson.updated_at && lesson.updated_at !== lesson.created_at && (
+                        <p className="text-xs text-muted-foreground/70">
+                          Updated {new Date(lesson.updated_at).toLocaleDateString()}
+                        </p>
+                      )}
                     </div>
                     <Badge variant="outline" className="capitalize shrink-0">
                       {lesson.difficulty}
@@ -264,6 +656,29 @@ export default function TeacherUploads() {
             </CardContent>
           </Card>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!deletingLesson} onOpenChange={() => setDeletingLesson(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Lesson</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete "{deletingLesson?.title}"? This action cannot be undone.
+                All student progress and submissions for this lesson will also be removed.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => handleDelete(deletingLesson)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Lesson
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

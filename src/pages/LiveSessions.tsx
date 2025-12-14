@@ -39,6 +39,9 @@ import { RaiseHandPanel } from '@/components/RaiseHandPanel';
 import { TeacherRaisedHandsPanel } from '@/components/TeacherRaisedHandsPanel';
 import { SessionRecordings } from '@/components/SessionRecordings';
 import { SignToCommunicate } from '@/components/SignToCommunicate';
+import { TeacherCommunicationPanel } from '@/components/TeacherCommunicationPanel';
+import { StudentResponsePanel } from '@/components/StudentResponsePanel';
+import { SpeechTest } from '@/components/SpeechTest';
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -402,6 +405,23 @@ export default function LiveSessions() {
 
             {/* Sidebar */}
             <div className="space-y-4">
+              {/* Teacher: Communication Panel */}
+              {isHost && (
+                <TeacherCommunicationPanel
+                  sessionId={activeSession.id}
+                  onStudentResponse={handleAnswerSubmitted}
+                />
+              )}
+
+              {/* Student: Response Panel */}
+              {!isHost && user && profile && (
+                <StudentResponsePanel
+                  sessionId={activeSession.id}
+                  studentId={user.id}
+                  studentName={profile.name}
+                />
+              )}
+
               {/* Teacher: Raised Hands Panel */}
               {isHost && (
                 <TeacherRaisedHandsPanel
@@ -442,7 +462,10 @@ export default function LiveSessions() {
               </Card>
 
               {/* Sign to Communicate - for all users */}
-              <SignToCommunicate className="max-h-[500px]" />
+              <SignToCommunicate className="max-h-[300px]" />
+              
+              {/* Speech Test - for debugging */}
+              <SpeechTest />
             </div>
           </div>
         </div>
@@ -631,6 +654,8 @@ export default function LiveSessions() {
             </div>
           </CardContent>
         </Card>
+
+        <SpeechTest />
       </div>
     </DashboardLayout>
   );

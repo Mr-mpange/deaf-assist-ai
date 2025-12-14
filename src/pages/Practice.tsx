@@ -36,22 +36,88 @@ export default function Practice() {
 
   const startCamera = async () => {
     try {
+      console.log('🎥 Requesting camera access...');
+      
+      // Check if camera is available first
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera API not supported in this browser');
+      }
+      
+      // Check current permissions
+      try {
+        const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        console.log('📋 Current camera permission:', permission.state);
+        
+        if (permission.state === 'denied') {
+          throw new Error('Camera permission permanently denied. Please reset in browser settings.');
+        }
+      } catch (permError) {
+        console.log('⚠️ Permission query failed (might be normal):', permError);
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'user', width: 640, height: 480 } 
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        setIsCameraOn(true);
-        toast({
-          title: "Camera Started",
-          description: "Position your hands in the frame",
-        });
-      }
+      
+      console.log('✅ Camera stream obtained:', stream);
+      
+      // Set camera state first to render video element
+      setIsCameraOn(true);
+      streamRef.current = stream;
+      
+      // Wait a bit for React to render the video element
+      setTimeout(() => {
+        if (videoRef.current) {
+          console.log('📹 Setting video source...');
+          videoRef.current.srcObject = stream;
+          
+          // Wait for video to be ready
+          videoRef.current.onloadedmetadata = () => {
+            console.log('🎬 Video metadata loaded, starting playback...');
+            videoRef.current?.play().then(() => {
+              console.log('▶️ Video playing successfully');
+            }).catch(playError => {
+              console.error('❌ Video play failed:', playError);
+            });
+          };
+          
+          console.log('✅ Camera setup complete');
+          
+          toast({
+            title: "Camera Started",
+            description: "Position your hands in the frame",
+          });
+        } else {
+          console.error('❌ Video ref still null after timeout');
+          // Fallback: try again after another short delay
+          setTimeout(() => {
+            if (videoRef.current && streamRef.current) {
+              console.log('🔄 Retrying video setup...');
+              videoRef.current.srcObject = streamRef.current;
+              videoRef.current.play();
+            }
+          }, 100);
+        }
+      }, 50);
     } catch (err) {
+      console.error('💥 Camera start failed:', err);
+      
+      let errorMessage = 'Unknown error';
+      if (err instanceof Error) {
+        if (err.name === 'NotAllowedError') {
+          errorMessage = 'Camera permission denied. Click the camera icon in address bar to allow access.';
+        } else if (err.name === 'NotFoundError') {
+          errorMessage = 'No camera found. Please connect a camera.';
+        } else if (err.name === 'NotReadableError') {
+          errorMessage = 'Camera is being used by another application.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
       toast({
         title: "Camera Error",
-        description: "Could not access camera. Please check permissions.",
+        description: errorMessage,
         variant: "destructive",
       });
     }

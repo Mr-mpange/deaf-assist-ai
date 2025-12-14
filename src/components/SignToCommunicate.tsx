@@ -13,6 +13,8 @@ import {
   Volume2,
   Trash2
 } from 'lucide-react';
+import { SpeechTestButton } from '@/components/SpeechTestButton';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import { useHandDetection, classifySign, SignPrediction } from '@/hooks/useHandDetection';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -49,15 +51,49 @@ export function SignToCommunicate({ onMessageSend, className }: SignToCommunicat
 
   const startCamera = async () => {
     try {
+      console.log('🎥 [SignToCommunicate] Requesting camera access...');
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'user', width: 320, height: 240 } 
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        setIsCameraOn(true);
-      }
+      
+      console.log('✅ [SignToCommunicate] Camera stream obtained:', stream);
+      
+      // Set camera state first to render video element
+      setIsCameraOn(true);
+      streamRef.current = stream;
+      
+      // Wait for React to render the video element
+      setTimeout(() => {
+        if (videoRef.current) {
+          console.log('📹 [SignToCommunicate] Setting video source...');
+          videoRef.current.srcObject = stream;
+          
+          videoRef.current.onloadedmetadata = () => {
+            console.log('🎬 [SignToCommunicate] Video metadata loaded, starting playback...');
+            videoRef.current?.play().then(() => {
+              console.log('▶️ [SignToCommunicate] Video playing successfully');
+            }).catch(playError => {
+              console.error('❌ [SignToCommunicate] Video play failed:', playError);
+            });
+          };
+          
+          console.log('✅ [SignToCommunicate] Camera setup complete');
+        } else {
+          console.error('❌ [SignToCommunicate] Video ref still null after timeout');
+          // Retry after short delay
+          setTimeout(() => {
+            if (videoRef.current && streamRef.current) {
+              console.log('🔄 [SignToCommunicate] Retrying video setup...');
+              videoRef.current.srcObject = streamRef.current;
+              videoRef.current.play();
+            }
+          }, 100);
+        }
+      }, 50);
+      
     } catch (err) {
+      console.error('💥 [SignToCommunicate] Camera start failed:', err);
       toast({
         title: "Camera Error",
         description: "Could not access camera",
@@ -165,11 +201,47 @@ export function SignToCommunicate({ onMessageSend, className }: SignToCommunicat
   };
 
   const speakMessage = (text: string) => {
+    if (!text.trim()) {
+      console.log('🔇 No text to speak');
+      return;
+    }
+
+    console.log('🔊 SPEAKING:', text);
+
     if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      speechSynthesis.speak(utterance);
+      try {
+        // Stop any current speech
+        speechSynthesis.cancel();
+        
+        // Simple, direct approach
+        setTimeout(() => {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.rate = 0.8;
+          utterance.volume = 1.0;
+          
+          utterance.onstart = () => console.log('🎤 SPEECH STARTED:', text);
+          utterance.onend = () => console.log('✅ SPEECH ENDED:', text);
+          utterance.onerror = (e) => console.error('❌ SPEECH ERROR:', e.error);
+          
+          console.log('🚀 CALLING speechSynthesis.speak()');
+          speechSynthesis.speak(utterance);
+          
+          // Debug info
+          setTimeout(() => {
+            console.log('📊 Speech status after 100ms:', {
+              speaking: speechSynthesis.speaking,
+              pending: speechSynthesis.pending,
+              paused: speechSynthesis.paused
+            });
+          }, 100);
+          
+        }, 200);
+
+      } catch (error) {
+        console.error('💥 Speech failed:', error);
+      }
+    } else {
+      console.error('❌ Speech synthesis not supported');
     }
   };
 
@@ -203,7 +275,8 @@ export function SignToCommunicate({ onMessageSend, className }: SignToCommunicat
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover bg-black"
+                style={{ minHeight: '200px' }}
               />
               <canvas
                 ref={canvasRef}
@@ -211,6 +284,12 @@ export function SignToCommunicate({ onMessageSend, className }: SignToCommunicat
                 height={240}
                 className="absolute inset-0 w-full h-full pointer-events-none"
               />
+              {/* Debug info */}
+              <div className="absolute top-2 left-2 bg-black/50 text-white text-xs p-1 rounded">
+                Camera: {isCameraOn ? 'ON' : 'OFF'} | 
+                Stream: {streamRef.current ? 'ACTIVE' : 'NONE'} |
+                Video: {videoRef.current ? 'REF OK' : 'NO REF'}
+              </div>
             </>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -255,9 +334,19 @@ export function SignToCommunicate({ onMessageSend, className }: SignToCommunicat
           <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-lg">
             <span className="text-sm text-muted-foreground">Building:</span>
             <span className="font-mono font-bold text-primary">{currentWord.join('')}</span>
-            <Button size="sm" variant="ghost" onClick={sendCurrentWord} className="ml-auto">
-              <Send className="w-4 h-4" />
-            </Button>
+            <div className="ml-auto flex gap-1">
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                onClick={() => speakMessage(currentWord.join(''))}
+                title="Speak current word"
+              >
+                <Volume2 className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={sendCurrentWord} title="Send message">
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         )}
 
@@ -323,6 +412,10 @@ export function SignToCommunicate({ onMessageSend, className }: SignToCommunicat
           </ScrollArea>
         )}
 
+        <p className="text-xs text-muted-foreground text-center">
+          Hold a letter sign steady to add to word. Use "Speak" to vocalize.
+        </p>
+        
         <p className="text-xs text-muted-foreground text-center">
           Hold a letter sign steady to add to word. Use "Speak" to vocalize.
         </p>
