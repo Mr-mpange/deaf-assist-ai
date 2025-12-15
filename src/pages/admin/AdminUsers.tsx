@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
-import { mockUsers } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -30,23 +30,109 @@ import {
   Trash2,
   Shield,
   GraduationCap,
-  UserCog
+  UserCog,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'teacher' | 'student';
+  created_at: string;
+  avatar_url?: string;
+}
+
 export default function AdminUsers() {
   const { role } = useAuth();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Role protection is handled by the route, but double-check here
   if (role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const filteredUsers = mockUsers.filter(
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Fetch users with their profiles and roles separately
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, user_id, avatar_url, created_at')
+        .order('created_at', { ascending: false });
+
+      if (profilesError) throw profilesError;
+
+      // Fetch user roles separately
+      const { data: rolesData, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+
+      if (rolesError) throw rolesError;
+
+      // Combine profiles with roles
+      const combinedUsers: User[] = profilesData?.map(profile => {
+        const userRole = rolesData?.find(role => role.user_id === profile.user_id);
+        return {
+          id: profile.user_id,
+          name: profile.name,
+          email: `${profile.name.toLowerCase().replace(/\s+/g, '.')}@example.com`, // Placeholder email
+          role: (userRole?.role as 'admin' | 'teacher' | 'student') || 'student',
+          created_at: profile.created_at,
+          avatar_url: profile.avatar_url
+        };
+      }) || [];
+
+      setUsers(combinedUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load users. Using demo data.",
+        variant: "destructive",
+      });
+      
+      // Fallback to some demo data
+      setUsers([
+        {
+          id: '1',
+          name: 'Demo Admin',
+          email: 'admin@example.com',
+          role: 'admin',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: '2',
+          name: 'Demo Teacher',
+          email: 'teacher@example.com',
+          role: 'teacher',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: '3',
+          name: 'Demo Student',
+          email: 'student@example.com',
+          role: 'student',
+          created_at: new Date().toISOString()
+        }
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredUsers = users.filter(
     u => u.name.toLowerCase().includes(search.toLowerCase()) ||
          u.email.toLowerCase().includes(search.toLowerCase())
   );
@@ -95,7 +181,7 @@ export default function AdminUsers() {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {mockUsers.filter(u => u.role === 'student').length}
+                  {users.filter(u => u.role === 'student').length}
                 </p>
                 <p className="text-sm text-muted-foreground">Students</p>
               </div>
@@ -108,7 +194,7 @@ export default function AdminUsers() {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {mockUsers.filter(u => u.role === 'teacher').length}
+                  {users.filter(u => u.role === 'teacher').length}
                 </p>
                 <p className="text-sm text-muted-foreground">Teachers</p>
               </div>
@@ -121,7 +207,7 @@ export default function AdminUsers() {
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {mockUsers.filter(u => u.role === 'admin').length}
+                  {users.filter(u => u.role === 'admin').length}
                 </p>
                 <p className="text-sm text-muted-foreground">Admins</p>
               </div>
@@ -144,7 +230,12 @@ export default function AdminUsers() {
             </div>
           </CardHeader>
           <CardContent>
-            <Table>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
@@ -178,7 +269,7 @@ export default function AdminUsers() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {new Date(u.createdAt).toLocaleDateString()}
+                        {new Date(u.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -209,6 +300,7 @@ export default function AdminUsers() {
                 })}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
       </div>
