@@ -10,7 +10,6 @@ export interface Participant {
   isMuted: boolean;
   isVideoOff: boolean;
   joinedAt: string;
-  connectionState?: RTCPeerConnectionState;
 }
 
 interface UseWebRTCOptions {
@@ -21,16 +20,18 @@ interface UseWebRTCOptions {
 }
 
 interface SignalingMessage {
-  type: 'offer' | 'answer' | 'ice-candidate' | 'user-joined' | 'user-left';
+  type: 'offer' | 'answer' | 'ice-candidate' | 'join' | 'leave';
   from: string;
-  to: string;
+  to?: string;
   data?: any;
+  roomId: string;
 }
 
-// STUN servers for NAT traversal
+// ICE servers for NAT traversal
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
 ];
 
 export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions) {
@@ -42,10 +43,11 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const { toast } = useToast();
   
-  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const signalingChannelRef = useRef<any>(null);
+  const participantsChannelRef = useRef<any>(null);
 
   const getMediaStream = useCallback(async () => {
     try {
@@ -66,20 +68,33 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     }
   }, [toast]);
 
-  // Create peer connection for a specific user
+  // Send signaling message via Supabase Realtime
+  const sendSignalingMessage = useCallback((message: SignalingMessage) => {
+    if (signalingChannelRef.current) {
+      signalingChannelRef.current.send({
+        type: 'broadcast',
+        event: 'webrtc-signal',
+        payload: message,
+      });
+    }
+  }, []);
+
+  // Create peer connection for a remote user
   const createPeerConnection = useCallback((remoteUserId: string) => {
     const peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     
-    // Add local stream tracks to peer connection
+    // Add local stream tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         peerConnection.addTrack(track, localStreamRef.current!);
       });
     }
 
-    // Handle incoming stream
+    // Handle incoming remote stream
     peerConnection.ontrack = (event) => {
       const [remoteStream] = event.streams;
+      console.log('Received remote stream from:', remoteUserId);
+      
       setParticipants(prev => prev.map(p => 
         p.id === remoteUserId 
           ? { ...p, stream: remoteStream }
@@ -89,130 +104,158 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
 
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
-      if (event.candidate && signalingChannelRef.current) {
+      if (event.candidate) {
         sendSignalingMessage({
           type: 'ice-candidate',
           from: userId,
           to: remoteUserId,
           data: event.candidate,
+          roomId,
         });
       }
     };
 
     // Handle connection state changes
     peerConnection.onconnectionstatechange = () => {
-      console.log(`Peer connection with ${remoteUserId}:`, peerConnection.connectionState);
+      console.log(`Connection with ${remoteUserId}:`, peerConnection.connectionState);
       
-      // Update participant connection status
-      setParticipants(prev => prev.map(p => 
-        p.id === remoteUserId 
-          ? { ...p, connectionState: peerConnection.connectionState }
-          : p
-      ));
-
-      if (peerConnection.connectionState === 'failed') {
-        // Attempt to restart ICE
-        peerConnection.restartIce();
-        toast({
-          title: "Connection Issue",
-          description: `Reconnecting to ${remoteUserId}...`,
-          variant: "destructive",
-        });
-      } else if (peerConnection.connectionState === 'connected') {
+      if (peerConnection.connectionState === 'connected') {
         toast({
           title: "Connected",
-          description: `Successfully connected to participant`,
+          description: `Video connection established with participant`,
         });
+      } else if (peerConnection.connectionState === 'failed') {
+        console.log('Connection failed, attempting restart...');
+        peerConnection.restartIce();
       }
     };
 
     peerConnectionsRef.current.set(remoteUserId, peerConnection);
     return peerConnection;
-  }, [userId]);
+  }, [userId, roomId, sendSignalingMessage, toast]);
 
-  // Send signaling message through database
-  const sendSignalingMessage = useCallback(async (message: SignalingMessage) => {
+  // Handle signaling messages
+  const handleSignalingMessage = useCallback(async (message: SignalingMessage) => {
+    if (message.roomId !== roomId) return;
+    
     try {
-      await supabase
-        .from('webrtc_signals')
-        .insert({
-          session_id: roomId,
-          from_user_id: message.from,
-          to_user_id: message.to,
-          signal_type: message.type,
-          signal_data: message.data,
-        });
-    } catch (error) {
-      console.warn('Error sending signaling message (table may not exist):', error);
-      // Fallback to broadcast if database signaling fails
-      if (signalingChannelRef.current) {
-        signalingChannelRef.current.send({
-          type: 'broadcast',
-          event: 'signaling',
-          payload: message,
-        });
-      }
-    }
-  }, [roomId]);
+      switch (message.type) {
+        case 'join':
+          if (message.from !== userId) {
+            // Someone joined, create offer if we're already in the room
+            const peerConnection = createPeerConnection(message.from);
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            sendSignalingMessage({
+              type: 'offer',
+              from: userId,
+              to: message.from,
+              data: offer,
+              roomId,
+            });
+          }
+          break;
 
-  // Handle signaling messages from database
-  const handleSignalingMessage = useCallback(async (signal: any) => {
-    if (signal.to_user_id !== userId) return;
-
-    const peerConnection = peerConnectionsRef.current.get(signal.from_user_id) || createPeerConnection(signal.from_user_id);
-
-    try {
-      switch (signal.signal_type) {
         case 'offer':
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.signal_data));
-          const answer = await peerConnection.createAnswer();
-          await peerConnection.setLocalDescription(answer);
-          await sendSignalingMessage({
-            type: 'answer',
-            from: userId,
-            to: signal.from_user_id,
-            data: answer,
-          });
+          if (message.to === userId) {
+            const peerConnection = createPeerConnection(message.from);
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+            
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            sendSignalingMessage({
+              type: 'answer',
+              from: userId,
+              to: message.from,
+              data: answer,
+              roomId,
+            });
+          }
           break;
 
         case 'answer':
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.signal_data));
+          if (message.to === userId) {
+            const peerConnection = peerConnectionsRef.current.get(message.from);
+            if (peerConnection) {
+              await peerConnection.setRemoteDescription(new RTCSessionDescription(message.data));
+            }
+          }
           break;
 
         case 'ice-candidate':
-          await peerConnection.addIceCandidate(new RTCIceCandidate(signal.signal_data));
+          if (message.to === userId) {
+            const peerConnection = peerConnectionsRef.current.get(message.from);
+            if (peerConnection) {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(message.data));
+            }
+          }
+          break;
+
+        case 'leave':
+          if (message.from !== userId) {
+            const peerConnection = peerConnectionsRef.current.get(message.from);
+            if (peerConnection) {
+              peerConnection.close();
+              peerConnectionsRef.current.delete(message.from);
+            }
+            
+            setParticipants(prev => prev.filter(p => p.id !== message.from));
+          }
           break;
       }
-
-      // Mark signal as processed
-      await supabase
-        .from('webrtc_signals')
-        .update({ processed: true })
-        .eq('id', signal.id);
-
     } catch (error) {
       console.error('Error handling signaling message:', error);
     }
-  }, [userId, createPeerConnection, sendSignalingMessage]);
+  }, [roomId, userId, createPeerConnection, sendSignalingMessage]);
 
-  // Initiate connection with a remote user
-  const initiateConnection = useCallback(async (remoteUserId: string) => {
-    const peerConnection = createPeerConnection(remoteUserId);
+  // Add participant (with WebRTC connection)
+  const addParticipant = useCallback((participantData: any) => {
+    const newParticipant: Participant = {
+      id: participantData.user_id,
+      name: participantData.name,
+      isHost: participantData.is_host,
+      isMuted: participantData.is_muted || false,
+      isVideoOff: participantData.is_video_off || false,
+      joinedAt: participantData.joined_at,
+      // Local stream for current user, remote stream will be added via WebRTC
+      stream: participantData.user_id === userId ? localStream || undefined : undefined,
+    };
     
-    try {
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      
-      sendSignalingMessage({
-        type: 'offer',
-        from: userId,
-        to: remoteUserId,
-        data: offer,
+    setParticipants(prev => {
+      // Avoid duplicates
+      if (prev.find(p => p.id === participantData.user_id)) return prev;
+      return [...prev, newParticipant];
+    });
+    
+    // Show notification for new participants (except self)
+    if (participantData.user_id !== userId) {
+      toast({
+        title: "Participant Joined",
+        description: `${participantData.name} has joined the session`,
       });
-    } catch (error) {
-      console.error('Error creating offer:', error);
     }
-  }, [createPeerConnection, sendSignalingMessage, userId]);
+  }, [userId, localStream, toast]);
+
+  const removeParticipant = useCallback((participantId: string, participantName: string) => {
+    // Close peer connection
+    const peerConnection = peerConnectionsRef.current.get(participantId);
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnectionsRef.current.delete(participantId);
+    }
+    
+    setParticipants(prev => prev.filter(p => p.id !== participantId));
+    
+    // Show notification for leaving participants (except self)
+    if (participantId !== userId) {
+      toast({
+        title: "Participant Left",
+        description: `${participantName} has left the session`,
+      });
+    }
+  }, [userId, toast]);
 
   const startCall = useCallback(async () => {
     if (!roomId || !userId) return false;
@@ -221,33 +264,55 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     if (!stream) return false;
     
     try {
-      // Setup signaling channel for WebRTC signals
-      signalingChannelRef.current = supabase.channel(`webrtc-signals-${roomId}`)
+      // Setup WebRTC signaling channel
+      signalingChannelRef.current = supabase.channel(`webrtc-${roomId}`)
+        .on('broadcast', { event: 'webrtc-signal' }, ({ payload }) => {
+          handleSignalingMessage(payload);
+        })
+        .subscribe();
+
+      // Setup participant tracking channel
+      participantsChannelRef.current = supabase.channel(`participants-${roomId}`)
         .on(
           'postgres_changes',
           {
             event: 'INSERT',
             schema: 'public',
-            table: 'webrtc_signals',
-            filter: `to_user_id=eq.${userId}`,
+            table: 'session_participants',
+            filter: `session_id=eq.${roomId}`,
           },
-          ({ new: newSignal }) => {
-            handleSignalingMessage(newSignal);
+          ({ new: newParticipant }) => {
+            addParticipant(newParticipant);
           }
         )
-        .on('broadcast', { event: 'signaling' }, ({ payload }) => {
-          // Fallback broadcast signaling
-          if (payload.to === userId) {
-            const signal = {
-              from_user_id: payload.from,
-              to_user_id: payload.to,
-              signal_type: payload.type,
-              signal_data: payload.data,
-              id: 'broadcast-' + Date.now(),
-            };
-            handleSignalingMessage(signal);
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'session_participants',
+            filter: `session_id=eq.${roomId}`,
+          },
+          ({ old: oldParticipant }) => {
+            removeParticipant(oldParticipant.user_id, oldParticipant.name);
           }
-        })
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'session_participants',
+            filter: `session_id=eq.${roomId}`,
+          },
+          ({ new: updatedParticipant }) => {
+            setParticipants(prev => prev.map(p => 
+              p.id === updatedParticipant.user_id 
+                ? { ...p, isMuted: updatedParticipant.is_muted, isVideoOff: updatedParticipant.is_video_off }
+                : p
+            ));
+          }
+        )
         .subscribe();
 
       // Add participant to database (if table exists)
@@ -267,45 +332,44 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         if (error) {
           console.error('Error adding participant:', error);
         }
-      } catch (error) {
-        console.warn('session_participants table not available yet:', error);
-      }
 
-      // Process any pending signals (if table exists)
-      try {
-        const { data: pendingSignals } = await supabase
-          .from('webrtc_signals')
+        // Fetch existing participants
+        const { data: existingParticipants } = await supabase
+          .from('session_participants')
           .select('*')
-          .eq('session_id', roomId)
-          .eq('to_user_id', userId)
-          .eq('processed', false)
-          .order('created_at', { ascending: true });
+          .eq('session_id', roomId);
 
-        if (pendingSignals) {
-          for (const signal of pendingSignals) {
-            await handleSignalingMessage(signal);
-          }
+        if (existingParticipants) {
+          existingParticipants.forEach(participant => {
+            addParticipant(participant);
+          });
         }
       } catch (error) {
-        console.warn('webrtc_signals table not available yet:', error);
+        console.warn('session_participants table not available, using signaling only:', error);
+        // Fallback: just add self as participant
+        setParticipants([{
+          id: userId,
+          name: userName,
+          stream,
+          isHost,
+          isMuted: false,
+          isVideoOff: false,
+          joinedAt: new Date().toISOString(),
+        }]);
       }
 
-      // Add self as participant locally
-      setParticipants([{
-        id: userId,
-        name: userName,
-        stream,
-        isHost,
-        isMuted: false,
-        isVideoOff: false,
-        joinedAt: new Date().toISOString(),
-      }]);
+      // Announce joining to other participants
+      sendSignalingMessage({
+        type: 'join',
+        from: userId,
+        roomId,
+      });
       
       setIsConnected(true);
       
       toast({
         title: isHost ? "Session Started" : "Joined Session",
-        description: isHost ? "Waiting for participants to join..." : "Connected to the live session",
+        description: "Setting up video connections with other participants...",
       });
       
       return true;
@@ -313,9 +377,16 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       console.error('Error starting call:', error);
       return false;
     }
-  }, [getMediaStream, roomId, userId, userName, isHost, toast, handleSignalingMessage]);
+  }, [getMediaStream, roomId, userId, userName, isHost, toast, addParticipant, removeParticipant, handleSignalingMessage, sendSignalingMessage]);
 
   const endCall = useCallback(async () => {
+    // Announce leaving to other participants
+    sendSignalingMessage({
+      type: 'leave',
+      from: userId,
+      roomId,
+    });
+
     try {
       // Remove participant from database
       if (roomId && userId) {
@@ -329,10 +400,19 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       console.error('Error removing participant:', error);
     }
 
-    // Close signaling channel
+    // Close all peer connections
+    peerConnectionsRef.current.forEach(pc => pc.close());
+    peerConnectionsRef.current.clear();
+
+    // Close channels
     if (signalingChannelRef.current) {
       supabase.removeChannel(signalingChannelRef.current);
       signalingChannelRef.current = null;
+    }
+    
+    if (participantsChannelRef.current) {
+      supabase.removeChannel(participantsChannelRef.current);
+      participantsChannelRef.current = null;
     }
 
     // Stop all tracks
@@ -346,10 +426,6 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       screenStreamRef.current = null;
     }
     
-    // Close all peer connections
-    peerConnectionsRef.current.forEach(pc => pc.close());
-    peerConnectionsRef.current.clear();
-    
     setLocalStream(null);
     setParticipants([]);
     setIsConnected(false);
@@ -359,7 +435,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       title: "Session Ended",
       description: "You have left the live session",
     });
-  }, [roomId, userId, toast]);
+  }, [roomId, userId, toast, sendSignalingMessage]);
 
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
@@ -376,7 +452,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
             .eq('session_id', roomId)
             .eq('user_id', userId)
             .then(({ error }) => {
-              if (error) console.error('Error updating mute state:', error);
+              if (error) console.warn('Could not update mute state in database');
             });
         }
       }
@@ -398,7 +474,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
             .eq('session_id', roomId)
             .eq('user_id', userId)
             .then(({ error }) => {
-              if (error) console.error('Error updating video state:', error);
+              if (error) console.warn('Could not update video state in database');
             });
         }
       }
@@ -433,7 +509,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       
       toast({
         title: "Screen Sharing Started",
-        description: "Your screen is now visible to participants",
+        description: "Your screen is now visible to all participants",
       });
       
       return screenStream;
@@ -473,128 +549,6 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     });
   }, [toast]);
 
-  // Real-time participant tracking and WebRTC connection management
-  useEffect(() => {
-    if (!roomId || !isConnected) return;
-
-    // Fetch current participants
-    const fetchParticipants = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('session_participants')
-          .select('*')
-          .eq('session_id', roomId);
-
-        if (error) {
-          console.error('Error fetching participants:', error);
-          return;
-        }
-
-        const participantList: Participant[] = data.map(p => ({
-          id: p.user_id,
-          name: p.name,
-          isHost: p.is_host,
-          isMuted: p.is_muted,
-          isVideoOff: p.is_video_off,
-          joinedAt: p.joined_at,
-          // Add local stream only for current user
-          stream: p.user_id === userId ? localStream || undefined : undefined,
-        }));
-
-        setParticipants(participantList);
-
-        // Initiate WebRTC connections with existing participants (except self)
-        data.forEach(participant => {
-          if (participant.user_id !== userId && !peerConnectionsRef.current.has(participant.user_id)) {
-            // Only initiate if we're the host or if we joined after them
-            if (isHost || new Date(participant.joined_at) < new Date()) {
-              initiateConnection(participant.user_id);
-            }
-          }
-        });
-      } catch (error) {
-        console.error('Error in fetchParticipants:', error);
-      }
-    };
-
-    fetchParticipants();
-
-    // Subscribe to participant changes
-    const channel = supabase
-      .channel(`session-participants-${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'session_participants',
-          filter: `session_id=eq.${roomId}`,
-        },
-        (payload) => {
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-          
-          if (eventType === 'INSERT' && newRecord) {
-            const newParticipant: Participant = {
-              id: newRecord.user_id,
-              name: newRecord.name,
-              isHost: newRecord.is_host,
-              isMuted: newRecord.is_muted,
-              isVideoOff: newRecord.is_video_off,
-              joinedAt: newRecord.joined_at,
-              stream: newRecord.user_id === userId ? localStream || undefined : undefined,
-            };
-            
-            setParticipants(prev => {
-              // Avoid duplicates
-              if (prev.find(p => p.id === newRecord.user_id)) return prev;
-              return [...prev, newParticipant];
-            });
-            
-            // Initiate WebRTC connection with new participant (except self)
-            if (newRecord.user_id !== userId) {
-              // Host always initiates, or if we're already in the session
-              if (isHost) {
-                initiateConnection(newRecord.user_id);
-              }
-              
-              toast({
-                title: "Participant Joined",
-                description: `${newRecord.name} has joined the session`,
-              });
-            }
-          } else if (eventType === 'DELETE' && oldRecord) {
-            // Close peer connection
-            const peerConnection = peerConnectionsRef.current.get(oldRecord.user_id);
-            if (peerConnection) {
-              peerConnection.close();
-              peerConnectionsRef.current.delete(oldRecord.user_id);
-            }
-            
-            setParticipants(prev => prev.filter(p => p.id !== oldRecord.user_id));
-            
-            // Show notification for leaving participants (except self)
-            if (oldRecord.user_id !== userId) {
-              toast({
-                title: "Participant Left",
-                description: `${oldRecord.name} has left the session`,
-              });
-            }
-          } else if (eventType === 'UPDATE' && newRecord) {
-            setParticipants(prev => prev.map(p => 
-              p.id === newRecord.user_id 
-                ? { ...p, isMuted: newRecord.is_muted, isVideoOff: newRecord.is_video_off }
-                : p
-            ));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [roomId, isConnected, userId, localStream, toast, isHost, initiateConnection]);
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -604,9 +558,8 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach(track => track.stop());
       }
-      peerConnectionsRef.current.forEach(pc => pc.close());
-      if (signalingChannelRef.current) {
-        supabase.removeChannel(signalingChannelRef.current);
+      if (participantsChannelRef.current) {
+        supabase.removeChannel(participantsChannelRef.current);
       }
     };
   }, []);

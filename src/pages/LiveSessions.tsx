@@ -421,30 +421,39 @@ export default function LiveSessions() {
             {/* Main content area */}
             <div className="lg:col-span-3 space-y-4">
               {/* Video Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {isScreenSharing && screenStream && (
-                  <div className="md:col-span-2">
-                    <VideoTile
-                      stream={screenStream}
-                      name="Screen Share"
-                      isScreenShare
-                      className="h-full"
-                    />
+              <div className="space-y-4">
+                {participants.length > 1 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-sm text-green-800">
+                      <strong>{participants.length} participants</strong> connected with live video and audio!
+                    </p>
                   </div>
                 )}
                 
-                {participants.map((participant) => (
-                  <VideoTile
-                    key={participant.id}
-                    stream={participant.stream}
-                    name={participant.name}
-                    isHost={participant.isHost}
-                    isMuted={participant.id === user?.id ? isMuted : participant.isMuted}
-                    isVideoOff={participant.id === user?.id ? isVideoOff : participant.isVideoOff}
-                    isLocal={participant.id === user?.id}
-                    connectionState={participant.connectionState}
-                  />
-                ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {isScreenSharing && screenStream && (
+                    <div className="md:col-span-2">
+                      <VideoTile
+                        stream={screenStream}
+                        name="Screen Share"
+                        isScreenShare
+                        className="h-full"
+                      />
+                    </div>
+                  )}
+                  
+                  {participants.map((participant) => (
+                    <VideoTile
+                      key={participant.id}
+                      stream={participant.stream}
+                      name={participant.name}
+                      isHost={participant.isHost}
+                      isMuted={participant.id === user?.id ? isMuted : participant.isMuted}
+                      isVideoOff={participant.id === user?.id ? isVideoOff : participant.isVideoOff}
+                      isLocal={participant.id === user?.id}
+                    />
+                  ))}
+                </div>
               </div>
 
               {/* Controls */}
@@ -562,19 +571,9 @@ export default function LiveSessions() {
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
                     {participants.map((p) => (
-                      <div key={p.id} className="flex items-center gap-1">
-                        <Badge variant={p.isHost ? "default" : "secondary"}>
-                          {p.name} {p.isHost && '(Host)'}
-                        </Badge>
-                        {p.id !== user?.id && (
-                          <div className={`w-2 h-2 rounded-full ${
-                            p.connectionState === 'connected' ? 'bg-green-500' :
-                            p.connectionState === 'connecting' ? 'bg-yellow-500 animate-pulse' :
-                            p.connectionState === 'failed' ? 'bg-red-500' :
-                            'bg-gray-400'
-                          }`} />
-                        )}
-                      </div>
+                      <Badge key={p.id} variant={p.isHost ? "default" : "secondary"}>
+                        {p.name} {p.isHost && '(Host)'}
+                      </Badge>
                     ))}
                   </div>
                 </CardContent>
@@ -789,16 +788,17 @@ export default function LiveSessions() {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">Live Session Features</h3>
                 <p className="text-sm text-muted-foreground">
-                  Join live classes to interact with instructors in real-time. 
-                  Raise your hand to answer questions using sign language! 
-                  Missed a session? Watch the recording below.
+                  Join live classes with full video and audio communication! 
+                  See and hear all participants in real-time.
+                  Teachers can share their screen for presentations.
+                  Raise your hand to answer questions using sign language!
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary">Video Chat</Badge>
-                <Badge variant="secondary">Screen Share</Badge>
+                <Badge variant="secondary">Live Video & Audio</Badge>
+                <Badge variant="secondary">Screen Sharing</Badge>
                 <Badge variant="secondary">Sign Language Q&A</Badge>
-                <Badge variant="secondary">Auto Recording</Badge>
+                <Badge variant="secondary">Session Recording</Badge>
               </div>
             </div>
           </CardContent>

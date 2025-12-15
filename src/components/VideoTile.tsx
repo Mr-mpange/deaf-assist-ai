@@ -74,7 +74,7 @@ export function VideoTile({
                   {connectionState === 'connecting' ? 'Connecting...' :
                    connectionState === 'failed' ? 'Connection failed' :
                    connectionState === 'disconnected' ? 'Disconnected' :
-                   'Waiting for video...'}
+                   'Video not available yet'}
                 </p>
               )}
             </div>
