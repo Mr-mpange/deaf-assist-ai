@@ -248,7 +248,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
             handleSignalingMessage(signal);
           }
         })
-       
+        .subscribe();
 
       // Add participant to database (if table exists)
       try {
