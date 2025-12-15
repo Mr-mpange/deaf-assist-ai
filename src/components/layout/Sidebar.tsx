@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { useSidebar } from '@/context/SidebarContext';
 import { Button } from '@/components/ui/button';
 import {
   Home,
@@ -17,7 +18,6 @@ import {
   ChevronRight,
   MessageSquare,
 } from 'lucide-react';
-import { useState } from 'react';
 
 interface NavItem {
   label: string;
@@ -40,7 +40,7 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const { user, profile, role, logout } = useAuth();
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggleCollapsed } = useSidebar();
 
   if (!user) return null;
 
@@ -66,12 +66,21 @@ export function Sidebar() {
   };
 
   return (
-    <aside 
-      className={cn(
-        "fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col",
-        collapsed ? "w-20" : "w-64"
+    <>
+      {/* Mobile Overlay */}
+      {!collapsed && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={toggleCollapsed}
+        />
       )}
-    >
+      
+      <aside 
+        className={cn(
+          "fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col",
+          collapsed ? "w-20" : "w-64"
+        )}
+      >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-6 border-b border-sidebar-border">
         <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
@@ -161,7 +170,7 @@ export function Sidebar() {
 
       {/* Collapse Toggle */}
       <button
-        onClick={() => setCollapsed(!collapsed)}
+        onClick={toggleCollapsed}
         className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-card border border-border shadow-sm flex items-center justify-center hover:bg-muted transition-colors"
       >
         {collapsed ? (
@@ -171,5 +180,6 @@ export function Sidebar() {
         )}
       </button>
     </aside>
+    </>
   );
 }
