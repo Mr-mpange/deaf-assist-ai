@@ -42,6 +42,9 @@ import { TeacherCommunicationPanel } from '@/components/TeacherCommunicationPane
 import { StudentResponsePanel } from '@/components/StudentResponsePanel';
 import { SpeechTest } from '@/components/SpeechTest';
 import { WebRTCDemo } from '@/components/WebRTCDemo';
+import { WebRTCSetupNotice } from '@/components/WebRTCSetupNotice';
+import { WebRTCStatus } from '@/components/WebRTCStatus';
+import { WebRTCDebug } from '@/components/WebRTCDebug';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -523,6 +526,13 @@ export default function LiveSessions() {
 
             {/* Sidebar */}
             <div className="space-y-4">
+              {/* Debug Info */}
+              <WebRTCDebug 
+                localStream={localStream}
+                participants={participants}
+                isConnected={isConnected}
+              />
+
               {/* Teacher: Communication Panel */}
               {isHost && (
                 <TeacherCommunicationPanel
@@ -644,6 +654,12 @@ export default function LiveSessions() {
               </DialogContent>
             </Dialog>
           )}
+        </div>
+
+        {/* Status and Setup */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <WebRTCStatus />
+          <WebRTCSetupNotice />
         </div>
 
         {/* Live Now */}

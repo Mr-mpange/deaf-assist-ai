@@ -51,14 +51,21 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
 
   const getMediaStream = useCallback(async () => {
     try {
+      console.log('Requesting camera and microphone access...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720, facingMode: 'user' },
         audio: { echoCancellation: true, noiseSuppression: true },
       });
+      
+      console.log('Media stream obtained:', stream);
+      console.log('Video tracks:', stream.getVideoTracks());
+      console.log('Audio tracks:', stream.getAudioTracks());
+      
       localStreamRef.current = stream;
       setLocalStream(stream);
       return stream;
     } catch (err) {
+      console.error('Media access error:', err);
       toast({
         title: "Media Error",
         description: "Could not access camera/microphone. Please check permissions.",
@@ -212,6 +219,10 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
 
   // Add participant (with WebRTC connection)
   const addParticipant = useCallback((participantData: any) => {
+    console.log('Adding participant:', participantData);
+    console.log('Current user ID:', userId);
+    console.log('Local stream available:', !!localStream);
+    
     const newParticipant: Participant = {
       id: participantData.user_id,
       name: participantData.name,
@@ -223,9 +234,15 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       stream: participantData.user_id === userId ? localStream || undefined : undefined,
     };
     
+    console.log('Created participant:', newParticipant);
+    
     setParticipants(prev => {
       // Avoid duplicates
-      if (prev.find(p => p.id === participantData.user_id)) return prev;
+      if (prev.find(p => p.id === participantData.user_id)) {
+        console.log('Participant already exists, skipping');
+        return prev;
+      }
+      console.log('Adding new participant to list');
       return [...prev, newParticipant];
     });
     
@@ -271,52 +288,61 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         })
         .subscribe();
 
-      // Setup participant tracking channel
-      participantsChannelRef.current = supabase.channel(`participants-${roomId}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'session_participants',
-            filter: `session_id=eq.${roomId}`,
-          },
-          ({ new: newParticipant }) => {
-            addParticipant(newParticipant);
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'session_participants',
-            filter: `session_id=eq.${roomId}`,
-          },
-          ({ old: oldParticipant }) => {
-            removeParticipant(oldParticipant.user_id, oldParticipant.name);
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'session_participants',
-            filter: `session_id=eq.${roomId}`,
-          },
-          ({ new: updatedParticipant }) => {
-            setParticipants(prev => prev.map(p => 
-              p.id === updatedParticipant.user_id 
-                ? { ...p, isMuted: updatedParticipant.is_muted, isVideoOff: updatedParticipant.is_video_off }
-                : p
-            ));
-          }
-        )
-        .subscribe();
-
-      // Add participant to database (if table exists)
+      // Try to setup participant tracking (graceful fallback if table doesn't exist)
+      let useDatabase = true;
+      
       try {
+        // Test if table exists by doing a simple query
+        await supabase
+          .from('session_participants')
+          .select('id')
+          .limit(1);
+          
+        // If we get here, table exists - setup database tracking
+        participantsChannelRef.current = supabase.channel(`participants-${roomId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'session_participants',
+              filter: `session_id=eq.${roomId}`,
+            },
+            ({ new: newParticipant }) => {
+              addParticipant(newParticipant);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: 'DELETE',
+              schema: 'public',
+              table: 'session_participants',
+              filter: `session_id=eq.${roomId}`,
+            },
+            ({ old: oldParticipant }) => {
+              removeParticipant(oldParticipant.user_id, oldParticipant.name);
+            }
+          )
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'session_participants',
+              filter: `session_id=eq.${roomId}`,
+            },
+            ({ new: updatedParticipant }) => {
+              setParticipants(prev => prev.map(p => 
+                p.id === updatedParticipant.user_id 
+                  ? { ...p, isMuted: updatedParticipant.is_muted, isVideoOff: updatedParticipant.is_video_off }
+                  : p
+              ));
+            }
+          )
+          .subscribe();
+
+        // Add participant to database
         const { error } = await supabase
           .from('session_participants')
           .upsert({
@@ -331,22 +357,28 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
 
         if (error) {
           console.error('Error adding participant:', error);
-        }
+          useDatabase = false;
+        } else {
+          // Fetch existing participants
+          const { data: existingParticipants } = await supabase
+            .from('session_participants')
+            .select('*')
+            .eq('session_id', roomId);
 
-        // Fetch existing participants
-        const { data: existingParticipants } = await supabase
-          .from('session_participants')
-          .select('*')
-          .eq('session_id', roomId);
-
-        if (existingParticipants) {
-          existingParticipants.forEach(participant => {
-            addParticipant(participant);
-          });
+          if (existingParticipants) {
+            existingParticipants.forEach(participant => {
+              addParticipant(participant);
+            });
+          }
         }
       } catch (error) {
-        console.warn('session_participants table not available, using signaling only:', error);
-        // Fallback: just add self as participant
+        console.warn('Database participant tracking not available, using WebRTC signaling only');
+        useDatabase = false;
+      }
+
+      // Fallback: Add self as participant locally if database not available
+      if (!useDatabase) {
+        console.log('Adding self as participant with stream:', stream);
         setParticipants([{
           id: userId,
           name: userName,
@@ -356,6 +388,11 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
           isVideoOff: false,
           joinedAt: new Date().toISOString(),
         }]);
+        
+        toast({
+          title: "WebRTC Mode",
+          description: "Using direct peer-to-peer connections (database tracking unavailable)",
+        });
       }
 
       // Announce joining to other participants
@@ -444,15 +481,20 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
         
-        // Update participant state in database
+        // Update local participant state
+        setParticipants(prev => prev.map(p => 
+          p.id === userId ? { ...p, isMuted: !audioTrack.enabled } : p
+        ));
+        
+        // Try to update database (graceful failure)
         if (roomId && userId) {
           supabase
             .from('session_participants')
             .update({ is_muted: !audioTrack.enabled })
             .eq('session_id', roomId)
             .eq('user_id', userId)
-            .then(({ error }) => {
-              if (error) console.warn('Could not update mute state in database');
+            .catch(() => {
+              // Silently fail if database not available
             });
         }
       }
@@ -466,15 +508,20 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         videoTrack.enabled = !videoTrack.enabled;
         setIsVideoOff(!videoTrack.enabled);
         
-        // Update participant state in database
+        // Update local participant state
+        setParticipants(prev => prev.map(p => 
+          p.id === userId ? { ...p, isVideoOff: !videoTrack.enabled } : p
+        ));
+        
+        // Try to update database (graceful failure)
         if (roomId && userId) {
           supabase
             .from('session_participants')
             .update({ is_video_off: !videoTrack.enabled })
             .eq('session_id', roomId)
             .eq('user_id', userId)
-            .then(({ error }) => {
-              if (error) console.warn('Could not update video state in database');
+            .catch(() => {
+              // Silently fail if database not available
             });
         }
       }
@@ -548,6 +595,16 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       description: "Returned to camera view",
     });
   }, [toast]);
+
+  // Update local participant stream when localStream changes
+  useEffect(() => {
+    if (localStream && userId) {
+      console.log('Updating local participant stream');
+      setParticipants(prev => prev.map(p => 
+        p.id === userId ? { ...p, stream: localStream } : p
+      ));
+    }
+  }, [localStream, userId]);
 
   // Cleanup on unmount
   useEffect(() => {

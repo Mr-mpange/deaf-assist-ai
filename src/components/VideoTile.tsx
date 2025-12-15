@@ -36,9 +36,15 @@ export function VideoTile({
 
   useEffect(() => {
     if (videoRef.current && stream) {
+      console.log('Setting video stream for:', name, stream);
       videoRef.current.srcObject = stream;
+      
+      // Ensure video plays
+      videoRef.current.play().catch(error => {
+        console.warn('Video play failed:', error);
+      });
     }
-  }, [stream]);
+  }, [stream, name]);
 
   return (
     <Card className={cn(
