@@ -54,6 +54,7 @@ export default function TeacherSubmissions() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isReviewing, setIsReviewing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Role protection is handled by the route, but double-check here
   if (role !== 'teacher' && role !== 'admin') {
@@ -99,7 +100,9 @@ export default function TeacherSubmissions() {
         : sub
     );
     
+    // Update submissions and force re-render
     setSubmissions(updatedSubmissions);
+    setRefreshKey(prev => prev + 1);
 
     toast({
       title: "Review Submitted",
@@ -120,6 +123,7 @@ export default function TeacherSubmissions() {
     );
     
     setSubmissions(updatedSubmissions);
+    setRefreshKey(prev => prev + 1);
     
     toast({
       title: "Submission Approved",
@@ -243,7 +247,7 @@ export default function TeacherSubmissions() {
           ) : (
             filteredSubmissions.map((submission) => (
             <Card 
-              key={submission.id} 
+              key={`${submission.id}-${refreshKey}`} 
               className="border-border/50 shadow-card hover:shadow-lg transition-shadow"
             >
               <CardContent className="p-6">
@@ -332,7 +336,7 @@ export default function TeacherSubmissions() {
                       <Eye className="w-4 h-4 mr-2" />
                       Review
                     </Button>
-                    {submission.status === 'reviewed' && (
+                    {(submission.status === 'reviewed' && submission.feedback) && (
                       <Button 
                         variant="default" 
                         size="sm"
@@ -352,14 +356,14 @@ export default function TeacherSubmissions() {
 
         {/* Review Dialog */}
         <Dialog open={!!selectedSubmission} onOpenChange={() => setSelectedSubmission(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
+          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>Review Submission</DialogTitle>
               <DialogDescription>
                 {selectedSubmission?.studentName} - {selectedSubmission?.lessonTitle}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-4">
+            <div className="flex-1 overflow-y-auto space-y-4 pt-4">
               {/* Video Player Placeholder */}
               <div className="aspect-video bg-muted rounded-xl flex items-center justify-center">
                 <div className="text-center">
@@ -425,6 +429,10 @@ export default function TeacherSubmissions() {
                 />
               </div>
 
+            </div>
+            
+            {/* Fixed Footer with Buttons */}
+            <div className="flex-shrink-0 border-t pt-4 mt-4">
               <div className="flex gap-3 justify-end">
                 <Button 
                   variant="outline" 

@@ -113,6 +113,7 @@ export default function AdminUsers() {
         };
       }) || [];
 
+      console.log('Fetched users:', combinedUsers);
       setUsers(combinedUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -220,21 +221,65 @@ export default function AdminUsers() {
     if (!editingUser) return;
 
     try {
-      // Update user profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ name: editingUser.name })
-        .eq('user_id', editingUser.id);
+      console.log('Updating user:', editingUser);
 
-      if (profileError) throw profileError;
+      // Create admin client that bypasses RLS
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('No active session');
+      }
 
-      // Update user role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .update({ role: editingUser.role })
-        .eq('user_id', editingUser.id);
+      // Try using RPC function first (bypasses RLS)
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('admin_update_user_profile', {
+        target_user_id: editingUser.id,
+        new_name: editingUser.name,
+        new_role: editingUser.role
+      });
 
-      if (roleError) throw roleError;
+      console.log('RPC update result:', { rpcResult, rpcError });
+
+      if (rpcError || (rpcResult && !rpcResult.success)) {
+        console.log('RPC failed, trying direct update...');
+        
+        // Fallback: Try direct update (will work if RLS policies are set up)
+        const { error: directProfileError } = await supabase
+          .from('profiles')
+          .update({ name: editingUser.name })
+          .eq('user_id', editingUser.id);
+
+        if (directProfileError) {
+          throw new Error(`Profile update failed: ${directProfileError.message}`);
+        }
+
+        // Fallback: Try direct role update
+        const { error: deleteError } = await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', editingUser.id);
+
+        if (deleteError) {
+          console.warn('Delete role error:', deleteError);
+        }
+
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert({ 
+            user_id: editingUser.id, 
+            role: editingUser.role 
+          });
+
+        if (roleError) {
+          throw new Error(`Role update failed: ${roleError.message}. Please run the admin SQL policies in Supabase dashboard.`);
+        }
+      }
+
+      console.log('Role update result:', { roleError });
+
+      if (roleError) {
+        console.error('Role update error:', roleError);
+        throw roleError;
+      }
 
       toast({
         title: "User Updated",
@@ -248,7 +293,7 @@ export default function AdminUsers() {
       console.error('Error updating user:', error);
       toast({
         title: "Error",
-        description: "Failed to update user",
+        description: `Failed to update user: ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
     }
@@ -443,6 +488,9 @@ export default function AdminUsers() {
                   <Button onClick={handleUpdateUser}>
                     Update User
                   </Button>
+                </div>
+                <div className="text-xs text-muted-foreground mt-2">
+                  Current values: Name: "{editingUser.name}", Role: "{editingUser.role}"
                 </div>
               </div>
             )}
