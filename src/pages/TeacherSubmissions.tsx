@@ -384,12 +384,32 @@ export default function TeacherSubmissions() {
               <CardContent className="p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                   {/* Video Preview */}
-                  <div className="relative w-full sm:w-40 aspect-video bg-muted rounded-lg overflow-hidden shrink-0">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-10 h-10 rounded-full bg-foreground/50 flex items-center justify-center">
-                        <Play className="w-5 h-5 text-primary-foreground ml-0.5" />
+                  <div 
+                    className="relative w-full sm:w-40 aspect-video bg-muted rounded-lg overflow-hidden shrink-0 cursor-pointer group"
+                    onClick={() => setSelectedSubmission(submission)}
+                  >
+                    {submission.video_url ? (
+                      <>
+                        <video
+                          src={submission.video_url}
+                          className="w-full h-full object-cover"
+                          preload="metadata"
+                          muted
+                        />
+                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/50 transition-colors">
+                          <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <Play className="w-5 h-5 text-black ml-0.5" />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <Video className="w-6 h-6 text-muted-foreground/50 mx-auto mb-1" />
+                          <p className="text-xs text-muted-foreground">No video</p>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Info */}
@@ -495,12 +515,54 @@ export default function TeacherSubmissions() {
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto space-y-4 pt-4">
-              {/* Video Player Placeholder */}
-              <div className="aspect-video bg-muted rounded-xl flex items-center justify-center">
-                <div className="text-center">
-                  <Play className="w-12 h-12 text-muted-foreground/50 mx-auto mb-2" />
-                  <p className="text-muted-foreground">Video Player (Demo)</p>
+              {/* Video Player */}
+              <div className="space-y-2">
+                <div className="aspect-video bg-black rounded-xl overflow-hidden">
+                  {selectedSubmission?.video_url ? (
+                    <video
+                      src={selectedSubmission.video_url}
+                      controls
+                      controlsList="nodownload"
+                      className="w-full h-full object-contain"
+                      preload="metadata"
+                      autoPlay={false}
+                    >
+                      <source src={selectedSubmission.video_url} type="video/mp4" />
+                      <source src={selectedSubmission.video_url} type="video/webm" />
+                      <source src={selectedSubmission.video_url} type="video/ogg" />
+                      Your browser does not support the video tag.
+                    </video>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-white/70">
+                      <div className="text-center">
+                        <Video className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                        <p>No video available</p>
+                        <p className="text-sm opacity-70">Student hasn't uploaded a video yet</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+                
+                {/* Video Info */}
+                {selectedSubmission?.video_url && (
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>Student submission video</span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (selectedSubmission.video_url) {
+                            window.open(selectedSubmission.video_url, '_blank');
+                          }
+                        }}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Download
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* AI Analysis */}
