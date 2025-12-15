@@ -28,7 +28,6 @@ import {
   Monitor,
   MonitorOff,
   PhoneOff,
-  UserPlus,
   Circle,
   StopCircle
 } from 'lucide-react';
@@ -42,6 +41,7 @@ import { SignToCommunicate } from '@/components/SignToCommunicate';
 import { TeacherCommunicationPanel } from '@/components/TeacherCommunicationPanel';
 import { StudentResponsePanel } from '@/components/StudentResponsePanel';
 import { SpeechTest } from '@/components/SpeechTest';
+import { WebRTCDemo } from '@/components/WebRTCDemo';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -84,7 +84,6 @@ export default function LiveSessions() {
     toggleVideo,
     startScreenShare,
     stopScreenShare,
-    addDemoParticipant,
   } = useWebRTC({
     roomId: activeSession?.id || '',
     userId: user?.id || '',
@@ -190,7 +189,7 @@ export default function LiveSessions() {
       if (liveError) throw liveError;
       if (upcomingError) throw upcomingError;
 
-      // Helper function to add host names
+      // Helper function to add host names and participant counts
       const addHostNames = async (sessions: any[]) => {
         return Promise.all(
           sessions.map(async (session) => {
@@ -200,9 +199,23 @@ export default function LiveSessions() {
               .eq('user_id', session.host_id)
               .single();
             
+            // Try to get participant count, fallback to 0 if table doesn't exist
+            let participantCount = 0;
+            try {
+              const { count } = await supabase
+                .from('session_participants')
+                .select('*', { count: 'exact', head: true })
+                .eq('session_id', session.id);
+              participantCount = count || 0;
+            } catch (error) {
+              // Table might not exist yet, use default count
+              participantCount = 0;
+            }
+            
             return {
               ...session,
               host_name: profile?.name || 'Unknown Host',
+              participants_count: participantCount,
             };
           })
         );
@@ -429,6 +442,7 @@ export default function LiveSessions() {
                     isMuted={participant.id === user?.id ? isMuted : participant.isMuted}
                     isVideoOff={participant.id === user?.id ? isVideoOff : participant.isVideoOff}
                     isLocal={participant.id === user?.id}
+                    connectionState={participant.connectionState}
                   />
                 ))}
               </div>
@@ -461,13 +475,7 @@ export default function LiveSessions() {
                       {isScreenSharing ? <MonitorOff className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
                     </Button>
 
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={() => addDemoParticipant(`Student ${participants.length}`)}
-                    >
-                      <UserPlus className="w-5 h-5" />
-                    </Button>
+
 
                     {/* Recording button - host only */}
                     {isHost && (
@@ -554,9 +562,19 @@ export default function LiveSessions() {
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
                     {participants.map((p) => (
-                      <Badge key={p.id} variant={p.isHost ? "default" : "secondary"}>
-                        {p.name} {p.isHost && '(Host)'}
-                      </Badge>
+                      <div key={p.id} className="flex items-center gap-1">
+                        <Badge variant={p.isHost ? "default" : "secondary"}>
+                          {p.name} {p.isHost && '(Host)'}
+                        </Badge>
+                        {p.id !== user?.id && (
+                          <div className={`w-2 h-2 rounded-full ${
+                            p.connectionState === 'connected' ? 'bg-green-500' :
+                            p.connectionState === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+                            p.connectionState === 'failed' ? 'bg-red-500' :
+                            'bg-gray-400'
+                          }`} />
+                        )}
+                      </div>
                     ))}
                   </div>
                 </CardContent>
@@ -653,7 +671,7 @@ export default function LiveSessions() {
                     </Badge>
                     <div className="absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-full bg-foreground/50 text-primary-foreground text-xs">
                       <Users className="w-3 h-3" />
-                      {session.participants_count}
+                      {session.participants_count || 0}
                     </div>
                   </div>
                   <CardContent className="p-4 space-y-4">
@@ -787,6 +805,14 @@ export default function LiveSessions() {
         </Card>
 
         <SpeechTest />
+
+        {/* WebRTC Demo - for testing */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold">WebRTC Testing</h2>
+            <WebRTCDemo />
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

@@ -17,6 +17,7 @@ interface VideoTileProps {
   isVideoOff?: boolean;
   isLocal?: boolean;
   isScreenShare?: boolean;
+  connectionState?: RTCPeerConnectionState;
   className?: string;
 }
 
@@ -28,6 +29,7 @@ export function VideoTile({
   isVideoOff = false,
   isLocal = false,
   isScreenShare = false,
+  connectionState,
   className,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -58,12 +60,23 @@ export function VideoTile({
               )}
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted">
-              <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted">
+              <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mb-2">
                 <span className="text-3xl font-bold text-primary">
                   {name.charAt(0).toUpperCase()}
                 </span>
               </div>
+              {isVideoOff && (
+                <p className="text-sm text-muted-foreground">Camera off</p>
+              )}
+              {!stream && !isLocal && (
+                <p className="text-xs text-muted-foreground">
+                  {connectionState === 'connecting' ? 'Connecting...' :
+                   connectionState === 'failed' ? 'Connection failed' :
+                   connectionState === 'disconnected' ? 'Disconnected' :
+                   'Waiting for video...'}
+                </p>
+              )}
             </div>
           )}
         </div>
