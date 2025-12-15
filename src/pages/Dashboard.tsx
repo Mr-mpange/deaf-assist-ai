@@ -71,6 +71,8 @@ function StudentDashboard() {
 
   const fetchStudentData = async () => {
     try {
+      const user = (await supabase.auth.getUser()).data.user;
+
       // Fetch recent lessons
       const { data: lessonsData } = await supabase
         .from('lessons')
@@ -91,18 +93,31 @@ function StudentDashboard() {
       const { data: progressData } = await supabase
         .from('lesson_progress')
         .select('completed')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
+        .eq('user_id', user?.id);
 
       const { data: practiceData } = await supabase
         .from('practice_sessions')
         .select('id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
+        .eq('user_id', user?.id);
+
+      // Fetch total lessons count
+      const { count: totalLessons } = await supabase
+        .from('lessons')
+        .select('*', { count: 'exact', head: true });
+
+      // Fetch live sessions joined by student
+      const { count: liveClassesJoined } = await supabase
+        .from('session_participants')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user?.id);
 
       setRecentLessons(lessonsData || []);
       setUpcomingSession(sessionsData?.[0] || null);
       setStats({
         lessonsCompleted: progressData?.filter(p => p.completed).length || 0,
-        practiceSessions: practiceData?.length || 0
+        practiceSessions: practiceData?.length || 0,
+        totalUsers: liveClassesJoined || 0,
+        totalLessons: totalLessons || 0
       });
     } catch (error) {
       console.error('Error fetching student data:', error);
@@ -137,12 +152,12 @@ function StudentDashboard() {
         />
         <StatsCard
           title="Live Classes Joined"
-          value="5"
+          value={stats.totalUsers?.toString() || "0"}
           icon={Radio}
         />
         <StatsCard
           title="Learning Streak"
-          value="7 days"
+          value={stats.totalLessons?.toString() || "0"}
           description="Keep it up!"
           icon={TrendingUp}
           variant="success"
@@ -237,11 +252,10 @@ function TeacherDashboard() {
       const { data: lessonsData } = await supabase
         .from('lessons')
         .select('*')
-        .eq('created_by', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(2);
+        .eq('author_id', user?.id)
+        .order('created_at', { ascending: false });
 
-      // Fetch pending submissions
+      // Fetch pending submissions for teacher's lessons
       const { data: submissionsData } = await supabase
         .from('submissions')
         .select(`
@@ -252,7 +266,19 @@ function TeacherDashboard() {
           lessons!submissions_lesson_id_fkey(title)
         `)
         .eq('status', 'pending')
+        .in('lesson_id', lessonsData?.map(l => l.id) || [])
         .order('created_at', { ascending: false });
+
+      // Fetch teacher's live sessions count (this month)
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      const { count: liveSessionsCount } = await supabase
+        .from('live_sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('host_id', user?.id)
+        .gte('created_at', startOfMonth.toISOString());
 
       // Transform submissions data
       const transformedSubmissions = submissionsData?.map(sub => ({
@@ -263,8 +289,17 @@ function TeacherDashboard() {
         lesson_title: (sub.lessons as any)?.title || 'Unknown Lesson'
       })) || [];
 
-      setMyLessons(lessonsData || []);
+      // Calculate teacher stats
+      const totalLessons = lessonsData?.length || 0;
+      const totalViews = lessonsData?.reduce((sum, lesson) => sum + (lesson.views || 0), 0) || 0;
+
+      setMyLessons(lessonsData?.slice(0, 2) || []);
       setPendingSubmissions(transformedSubmissions);
+      setStats({
+        totalLessons,
+        totalViews,
+        completionRate: liveSessionsCount || 0
+      });
     } catch (error) {
       console.error('Error fetching teacher data:', error);
     } finally {
@@ -283,13 +318,13 @@ function TeacherDashboard() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Total Lessons"
-          value="8"
+          value={stats.totalLessons?.toString() || "0"}
           icon={BookOpen}
           variant="primary"
         />
         <StatsCard
           title="Total Views"
-          value="4.2K"
+          value={stats.totalViews?.toLocaleString() || "0"}
           trend={{ value: 15, positive: true }}
           icon={Eye}
         />
@@ -302,7 +337,7 @@ function TeacherDashboard() {
         />
         <StatsCard
           title="Live Sessions"
-          value="12"
+          value={stats.completionRate?.toString() || "0"}
           description="This month"
           icon={Radio}
         />
@@ -358,8 +393,8 @@ function TeacherDashboard() {
                 pendingSubmissions.map((sub) => (
                   <div key={sub.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                     <div>
-                      <p className="font-medium text-sm">{sub.studentName}</p>
-                      <p className="text-xs text-muted-foreground">{sub.lessonTitle}</p>
+                      <p className="font-medium text-sm">{sub.student_name}</p>
+                      <p className="text-xs text-muted-foreground">{sub.lesson_title}</p>
                     </div>
                     <Badge variant="outline">Pending</Badge>
                   </div>
