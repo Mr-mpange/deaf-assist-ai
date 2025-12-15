@@ -22,6 +22,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { 
   Users, 
   Search, 
@@ -52,6 +67,10 @@ export default function AdminUsers() {
   const [search, setSearch] = useState('');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Role protection is handled by the route, but double-check here
   if (role !== 'admin') {
@@ -149,11 +168,90 @@ export default function AdminUsers() {
     student: GraduationCap,
   };
 
-  const handleDeleteUser = (userId: string) => {
-    toast({
-      title: "User Deleted",
-      description: "User has been removed from the system (Demo)",
-    });
+  const handleDeleteUser = (user: User) => {
+    setDeletingUser(user);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deletingUser) return;
+
+    try {
+      // Delete user role first
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', deletingUser.id);
+
+      if (roleError) throw roleError;
+
+      // Delete user profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('user_id', deletingUser.id);
+
+      if (profileError) throw profileError;
+
+      toast({
+        title: "User Deleted",
+        description: "User has been removed from the system",
+      });
+
+      setIsDeleteDialogOpen(false);
+      setDeletingUser(null);
+      fetchUsers();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete user",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditUser = (user: User) => {
+    setEditingUser(user);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+
+    try {
+      // Update user profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ name: editingUser.name })
+        .eq('user_id', editingUser.id);
+
+      if (profileError) throw profileError;
+
+      // Update user role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .update({ role: editingUser.role })
+        .eq('user_id', editingUser.id);
+
+      if (roleError) throw roleError;
+
+      toast({
+        title: "User Updated",
+        description: "User information has been updated successfully",
+      });
+
+      setIsEditDialogOpen(false);
+      setEditingUser(null);
+      fetchUsers();
+    } catch (error) {
+      console.error('Error updating user:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update user",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -281,13 +379,13 @@ export default function AdminUsers() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditUser(u)}>
                               <Edit2 className="w-4 h-4 mr-2" />
                               Edit User
                             </DropdownMenuItem>
                             <DropdownMenuItem 
                               className="text-destructive"
-                              onClick={() => handleDeleteUser(u.id)}
+                              onClick={() => handleDeleteUser(u)}
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
                               Delete User
@@ -303,6 +401,78 @@ export default function AdminUsers() {
             )}
           </CardContent>
         </Card>
+
+        {/* Edit User Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit User</DialogTitle>
+            </DialogHeader>
+            {editingUser && (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    value={editingUser.name}
+                    onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="role">Role</Label>
+                  <Select
+                    value={editingUser.role}
+                    onValueChange={(value: 'admin' | 'teacher' | 'student') => 
+                      setEditingUser({ ...editingUser, role: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="student">Student</SelectItem>
+                      <SelectItem value="teacher">Teacher</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleUpdateUser}>
+                    Update User
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete User</DialogTitle>
+            </DialogHeader>
+            {deletingUser && (
+              <div className="space-y-4">
+                <p>Are you sure you want to delete <strong>{deletingUser.name}</strong>?</p>
+                <p className="text-sm text-muted-foreground">
+                  This action cannot be undone. This will permanently delete the user account and all associated data.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={confirmDeleteUser}>
+                    Delete User
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
