@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
-import { mockSubmissions } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -44,29 +44,113 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 
+interface Submission {
+  id: string;
+  student_id: string;
+  lesson_id: string;
+  video_url: string | null;
+  status: 'pending' | 'reviewed' | 'approved';
+  feedback: string | null;
+  rating: number | null;
+  created_at: string;
+  updated_at: string;
+  // Joined data
+  student_name: string;
+  lesson_title: string;
+  ai_prediction?: {
+    sign: string;
+    confidence: number;
+  };
+}
+
 export default function TeacherSubmissions() {
   const { role } = useAuth();
   const { toast } = useToast();
-  const [selectedSubmission, setSelectedSubmission] = useState<typeof mockSubmissions[0] | null>(null);
+  const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [feedback, setFeedback] = useState('');
   const [rating, setRating] = useState<number>(0);
-  const [submissions, setSubmissions] = useState(mockSubmissions);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [isReviewing, setIsReviewing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Role protection is handled by the route, but double-check here
   if (role !== 'teacher' && role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
+  useEffect(() => {
+    fetchSubmissions();
+  }, []);
+
+  const fetchSubmissions = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Fetch submissions with student and lesson information
+      const { data: submissionsData, error } = await supabase
+        .from('submissions')
+        .select(`
+          id,
+          student_id,
+          lesson_id,
+          video_url,
+          status,
+          feedback,
+          rating,
+          created_at,
+          updated_at,
+          profiles!submissions_student_id_fkey(name),
+          lessons!submissions_lesson_id_fkey(title)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Transform the data to match our interface
+      const transformedSubmissions: Submission[] = submissionsData?.map(sub => ({
+        id: sub.id,
+        student_id: sub.student_id,
+        lesson_id: sub.lesson_id,
+        video_url: sub.video_url,
+        status: sub.status as 'pending' | 'reviewed' | 'approved',
+        feedback: sub.feedback,
+        rating: sub.rating,
+        created_at: sub.created_at,
+        updated_at: sub.updated_at,
+        student_name: (sub.profiles as any)?.name || 'Unknown Student',
+        lesson_title: (sub.lessons as any)?.title || 'Unknown Lesson',
+        // Add mock AI prediction for demo purposes
+        ai_prediction: sub.status === 'pending' ? {
+          sign: ['HELLO', 'THANK YOU', 'PLEASE', 'A-B-C', 'GOOD'][Math.floor(Math.random() * 5)],
+          confidence: 0.85 + Math.random() * 0.15
+        } : undefined
+      })) || [];
+
+      setSubmissions(transformedSubmissions);
+    } catch (error) {
+      console.error('Error fetching submissions:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load submissions",
+        variant: "destructive",
+      });
+      
+      // Fallback to empty array
+      setSubmissions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Filter submissions based on status and search term
   const filteredSubmissions = submissions.filter(submission => {
     const matchesStatus = filterStatus === 'all' || submission.status === filterStatus;
     const matchesSearch = searchTerm === '' || 
-      submission.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      submission.lessonTitle.toLowerCase().includes(searchTerm.toLowerCase());
+      submission.student_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      submission.lesson_title.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesStatus && matchesSearch;
   });
 
@@ -84,51 +168,91 @@ export default function TeacherSubmissions() {
 
     setIsReviewing(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      // Update submission in database
+      const { error } = await supabase
+        .from('submissions')
+        .update({
+          status: 'reviewed',
+          feedback: feedback.trim(),
+          rating: rating || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedSubmission.id);
 
-    // Update submission with feedback and rating
-    const updatedSubmissions = submissions.map(sub => 
-      sub.id === selectedSubmission.id 
-        ? { 
-            ...sub, 
-            status: 'reviewed' as const,
-            feedback,
-            rating,
-            reviewedAt: new Date().toISOString()
-          }
-        : sub
-    );
-    
-    // Update submissions and force re-render
-    setSubmissions(updatedSubmissions);
-    setRefreshKey(prev => prev + 1);
+      if (error) throw error;
 
-    toast({
-      title: "Review Submitted",
-      description: `Feedback sent to ${selectedSubmission?.studentName}`,
-    });
-    
-    setSelectedSubmission(null);
-    setFeedback('');
-    setRating(0);
-    setIsReviewing(false);
+      // Update local state
+      const updatedSubmissions = submissions.map(sub => 
+        sub.id === selectedSubmission.id 
+          ? { 
+              ...sub, 
+              status: 'reviewed' as const,
+              feedback: feedback.trim(),
+              rating,
+              updated_at: new Date().toISOString()
+            }
+          : sub
+      );
+      
+      setSubmissions(updatedSubmissions);
+      setRefreshKey(prev => prev + 1);
+
+      toast({
+        title: "Review Submitted",
+        description: `Feedback sent to ${selectedSubmission?.student_name}`,
+      });
+      
+      setSelectedSubmission(null);
+      setFeedback('');
+      setRating(0);
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit review. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReviewing(false);
+    }
   };
 
-  const handleApprove = async (submission: any) => {
-    const updatedSubmissions = submissions.map(sub => 
-      sub.id === submission.id 
-        ? { ...sub, status: 'approved' as const, approvedAt: new Date().toISOString() }
-        : sub
-    );
-    
-    setSubmissions(updatedSubmissions);
-    setRefreshKey(prev => prev + 1);
-    
-    toast({
-      title: "Submission Approved",
-      description: `${submission.studentName}'s submission has been approved`,
-    });
+  const handleApprove = async (submission: Submission) => {
+    try {
+      // Update submission status in database
+      const { error } = await supabase
+        .from('submissions')
+        .update({
+          status: 'approved',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', submission.id);
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedSubmissions = submissions.map(sub => 
+        sub.id === submission.id 
+          ? { ...sub, status: 'approved' as const, updated_at: new Date().toISOString() }
+          : sub
+      );
+      
+      setSubmissions(updatedSubmissions);
+      setRefreshKey(prev => prev + 1);
+      
+      toast({
+        title: "Submission Approved",
+        description: `${submission.student_name}'s submission has been approved`,
+      });
+    } catch (error) {
+      console.error('Error approving submission:', error);
+      toast({
+        title: "Error",
+        description: "Failed to approve submission. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const playAudioFeedback = (text: string) => {
@@ -232,7 +356,14 @@ export default function TeacherSubmissions() {
 
         {/* Submissions List */}
         <div className="space-y-4">
-          {filteredSubmissions.length === 0 ? (
+          {isLoading ? (
+            <Card className="border-border/50 shadow-card">
+              <CardContent className="py-12 text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading submissions...</p>
+              </CardContent>
+            </Card>
+          ) : filteredSubmissions.length === 0 ? (
             <Card className="border-border/50 shadow-card">
               <CardContent className="py-12 text-center">
                 <Video className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
@@ -265,10 +396,10 @@ export default function TeacherSubmissions() {
                   <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <h3 className="font-semibold">{submission.lessonTitle}</h3>
+                        <h3 className="font-semibold">{submission.lesson_title}</h3>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <User className="w-4 h-4" />
-                          {submission.studentName}
+                          {submission.student_name}
                         </div>
                       </div>
                       <Badge 
@@ -280,18 +411,18 @@ export default function TeacherSubmissions() {
                     </div>
 
                     {/* AI Prediction */}
-                    {submission.aiPrediction && (
+                    {submission.ai_prediction && (
                       <div className="flex items-center gap-2 text-sm">
                         <Sparkles className="w-4 h-4 text-primary" />
                         <span>
-                          AI detected: <strong>{submission.aiPrediction.sign}</strong>
-                          {' '}({Math.round(submission.aiPrediction.confidence * 100)}% confidence)
+                          AI detected: <strong>{submission.ai_prediction.sign}</strong>
+                          {' '}({Math.round(submission.ai_prediction.confidence * 100)}% confidence)
                         </span>
                       </div>
                     )}
 
                     <p className="text-xs text-muted-foreground">
-                      Submitted {new Date(submission.submittedAt).toLocaleDateString()}
+                      Submitted {new Date(submission.created_at).toLocaleDateString()}
                     </p>
 
                     {submission.feedback && (
@@ -360,7 +491,7 @@ export default function TeacherSubmissions() {
             <DialogHeader className="flex-shrink-0">
               <DialogTitle>Review Submission</DialogTitle>
               <DialogDescription>
-                {selectedSubmission?.studentName} - {selectedSubmission?.lessonTitle}
+                {selectedSubmission?.student_name} - {selectedSubmission?.lesson_title}
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto space-y-4 pt-4">
@@ -373,15 +504,15 @@ export default function TeacherSubmissions() {
               </div>
 
               {/* AI Analysis */}
-              {selectedSubmission?.aiPrediction && (
+              {selectedSubmission?.ai_prediction && (
                 <Card className="border-primary/20 bg-primary/5">
                   <CardContent className="p-4 flex items-center gap-4">
                     <Sparkles className="w-6 h-6 text-primary" />
                     <div>
                       <p className="font-medium">AI Analysis</p>
                       <p className="text-sm text-muted-foreground">
-                        Detected sign: <strong>{selectedSubmission.aiPrediction.sign}</strong>
-                        {' '}with {Math.round(selectedSubmission.aiPrediction.confidence * 100)}% confidence
+                        Detected sign: <strong>{selectedSubmission.ai_prediction.sign}</strong>
+                        {' '}with {Math.round(selectedSubmission.ai_prediction.confidence * 100)}% confidence
                       </p>
                     </div>
                   </CardContent>
