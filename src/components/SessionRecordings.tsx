@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Play, Clock, Calendar, Video, Loader2, Download } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Play, Clock, Calendar, Video, Loader2, Download, Filter } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -18,8 +20,13 @@ interface Recording {
 
 export function SessionRecordings() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [filteredRecordings, setFilteredRecordings] = useState<Recording[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
+  const [dateFilter, setDateFilter] = useState({
+    startDate: '',
+    endDate: ''
+  });
 
   useEffect(() => {
     fetchRecordings();
@@ -52,6 +59,7 @@ export function SessionRecordings() {
 
     if (data) {
       setRecordings(data);
+      setFilteredRecordings(data);
     }
     setIsLoading(false);
   };
@@ -59,6 +67,33 @@ export function SessionRecordings() {
   const playRecording = (recording: Recording) => {
     setSelectedRecording(recording);
   };
+
+  const filterRecordings = () => {
+    let filtered = recordings;
+
+    if (dateFilter.startDate) {
+      filtered = filtered.filter(recording => 
+        new Date(recording.recorded_at) >= new Date(dateFilter.startDate)
+      );
+    }
+
+    if (dateFilter.endDate) {
+      filtered = filtered.filter(recording => 
+        new Date(recording.recorded_at) <= new Date(dateFilter.endDate + 'T23:59:59')
+      );
+    }
+
+    setFilteredRecordings(filtered);
+  };
+
+  const clearFilters = () => {
+    setDateFilter({ startDate: '', endDate: '' });
+    setFilteredRecordings(recordings);
+  };
+
+  useEffect(() => {
+    filterRecordings();
+  }, [dateFilter, recordings]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -94,17 +129,66 @@ export function SessionRecordings() {
             <Video className="w-5 h-5" />
             Past Session Recordings
           </CardTitle>
+          
+          {/* Date Filter */}
+          <div className="flex flex-col sm:flex-row gap-4 pt-4">
+            <div className="flex-1">
+              <Label htmlFor="startDate" className="text-sm">From Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={dateFilter.startDate}
+                onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+            <div className="flex-1">
+              <Label htmlFor="endDate" className="text-sm">To Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={dateFilter.endDate}
+                onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearFilters}
+                disabled={!dateFilter.startDate && !dateFilter.endDate}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {recordings.length === 0 ? (
+          {filteredRecordings.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Video className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No recordings available yet</p>
-              <p className="text-sm mt-1">Recorded sessions will appear here</p>
+              <p>
+                {recordings.length === 0 
+                  ? "No recordings available yet" 
+                  : "No recordings found for selected date range"
+                }
+              </p>
+              <p className="text-sm mt-1">
+                {recordings.length === 0 
+                  ? "Recorded sessions will appear here" 
+                  : "Try adjusting your date filter"
+                }
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {recordings.map((recording) => (
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm text-muted-foreground">
+                  Showing {filteredRecordings.length} of {recordings.length} recordings
+                </p>
+              </div>
+              {filteredRecordings.map((recording) => (
                 <div
                   key={recording.id}
                   className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"

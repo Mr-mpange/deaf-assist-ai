@@ -51,18 +51,19 @@ export function useSpeechRecognition({
           setIsListening(true);
           toast({
             title: "Listening",
-            description: "Speak now...",
+            description: "Speak now... (Make sure your microphone is unmuted)",
           });
         };
 
         recognition.onresult = (event: any) => {
-          console.log('📝 Speech recognition result received');
+          console.log('📝 Speech recognition result received', event);
           let finalTranscript = '';
           let interimTranscript = '';
 
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i];
             const transcript = result[0].transcript;
+            console.log(`Result ${i}: "${transcript}" (final: ${result.isFinal})`);
 
             if (result.isFinal) {
               finalTranscript += transcript;
@@ -171,16 +172,38 @@ export function useSpeechRecognition({
       return;
     }
 
+    // Check if we're in a secure context (HTTPS or localhost)
+    if (!window.isSecureContext) {
+      console.error('❌ Not in secure context');
+      toast({
+        title: "Secure Context Required",
+        description: "Speech recognition requires HTTPS or localhost.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check microphone permissions first
     try {
       console.log('🎤 Requesting microphone permission...');
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('✅ Microphone permission granted');
+      
+      // Test if microphone is actually working
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+      
+      // Stop the test stream
+      stream.getTracks().forEach(track => track.stop());
+      audioContext.close();
+      
     } catch (permError) {
       console.error('❌ Microphone permission denied:', permError);
       toast({
         title: "Microphone Permission Required",
-        description: "Please allow microphone access to use speech recognition.",
+        description: "Please allow microphone access to use speech recognition. Check your browser settings.",
         variant: "destructive",
       });
       return;
@@ -189,7 +212,28 @@ export function useSpeechRecognition({
     if (recognitionRef.current) {
       try {
         console.log('🚀 Starting speech recognition...');
-        recognitionRef.current.start();
+        
+        // Stop any existing recognition first
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // Ignore errors when stopping
+        }
+        
+        // Small delay to ensure previous recognition is stopped
+        setTimeout(() => {
+          try {
+            recognitionRef.current.start();
+          } catch (startError) {
+            console.error('💥 Failed to start speech recognition:', startError);
+            toast({
+              title: "Speech Recognition Error",
+              description: "Could not start speech recognition. Please try again.",
+              variant: "destructive",
+            });
+          }
+        }, 100);
+        
       } catch (error) {
         console.error('💥 Failed to start speech recognition:', error);
         toast({

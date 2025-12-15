@@ -42,6 +42,7 @@ import { SignToCommunicate } from '@/components/SignToCommunicate';
 import { TeacherCommunicationPanel } from '@/components/TeacherCommunicationPanel';
 import { StudentResponsePanel } from '@/components/StudentResponsePanel';
 import { SpeechTest } from '@/components/SpeechTest';
+
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -61,7 +62,8 @@ export default function LiveSessions() {
   const [isCreating, setIsCreating] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
   const [activeSession, setActiveSession] = useState<LiveSession | null>(null);
-  const [sessions, setSessions] = useState<LiveSession[]>([]);
+  const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
+  const [upcomingSessions, setUpcomingSessions] = useState<LiveSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [calledStudentId, setCalledStudentId] = useState<string | null>(null);
   
@@ -158,20 +160,71 @@ export default function LiveSessions() {
   const fetchSessions = async () => {
     setIsLoading(true);
     
-    const { data, error } = await supabase
-      .from('live_sessions')
-      .select(`
-        *,
-        host:profiles!live_sessions_host_id_fkey(name)
-      `)
-      .in('status', ['scheduled', 'live'])
-      .order('scheduled_at', { ascending: true });
-    
-    if (data) {
-      setSessions(data.map(s => ({
-        ...s,
-        host_name: (s.host as any)?.name || 'Unknown Host',
-      })));
+    try {
+      // First, clean up stale live sessions (older than 4 hours)
+      const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+      await supabase
+        .from('live_sessions')
+        .update({ 
+          status: 'ended', 
+          ended_at: new Date().toISOString() 
+        })
+        .eq('status', 'live')
+        .lt('created_at', fourHoursAgo);
+
+      // Fetch live sessions
+      const { data: liveData, error: liveError } = await supabase
+        .from('live_sessions')
+        .select('*')
+        .eq('status', 'live')
+        .order('created_at', { ascending: false });
+
+      // Fetch upcoming sessions
+      const { data: upcomingData, error: upcomingError } = await supabase
+        .from('live_sessions')
+        .select('*')
+        .eq('status', 'scheduled')
+        .gte('scheduled_at', new Date().toISOString())
+        .order('scheduled_at', { ascending: true });
+
+      if (liveError) throw liveError;
+      if (upcomingError) throw upcomingError;
+
+      // Helper function to add host names
+      const addHostNames = async (sessions: any[]) => {
+        return Promise.all(
+          sessions.map(async (session) => {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('name')
+              .eq('user_id', session.host_id)
+              .single();
+            
+            return {
+              ...session,
+              host_name: profile?.name || 'Unknown Host',
+            };
+          })
+        );
+      };
+
+      if (liveData) {
+        const liveSessionsWithHosts = await addHostNames(liveData);
+        setLiveSessions(liveSessionsWithHosts);
+      }
+
+      if (upcomingData) {
+        const upcomingSessionsWithHosts = await addHostNames(upcomingData);
+        setUpcomingSessions(upcomingSessionsWithHosts);
+      }
+
+    } catch (error) {
+      console.error('Error fetching sessions:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load sessions",
+        variant: "destructive",
+      });
     }
     
     setIsLoading(false);
@@ -263,6 +316,55 @@ export default function LiveSessions() {
     fetchSessions();
   };
 
+  const handleEndSessionFromList = async (sessionId: string) => {
+    try {
+      const { error } = await supabase
+        .from('live_sessions')
+        .update({ 
+          status: 'ended', 
+          ended_at: new Date().toISOString() 
+        })
+        .eq('id', sessionId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Session Ended",
+        description: "The live session has been ended successfully.",
+      });
+
+      // Refresh sessions
+      fetchSessions();
+    } catch (error) {
+      console.error('Error ending session:', error);
+      toast({
+        title: "Error",
+        description: "Failed to end session",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getSessionDuration = (createdAt: string) => {
+    const now = new Date();
+    const created = new Date(createdAt);
+    const diffMs = now.getTime() - created.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffHours > 0) {
+      return `${diffHours}h ${diffMinutes}m`;
+    }
+    return `${diffMinutes}m`;
+  };
+
+  const isSessionStale = (createdAt: string) => {
+    const now = new Date();
+    const created = new Date(createdAt);
+    const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+    return diffHours > 2; // Consider stale after 2 hours
+  };
+
   const handleToggleRecording = async () => {
     if (isRecording) {
       await stopRecording();
@@ -282,8 +384,7 @@ export default function LiveSessions() {
     });
   };
 
-  const liveSessions = sessions.filter(s => s.status === 'live');
-  const scheduledSessions = sessions.filter(s => s.status === 'scheduled');
+  // We now have separate state variables for live and upcoming sessions
 
   // Active Session View
   if (activeSession && isConnected) {
@@ -485,7 +586,7 @@ export default function LiveSessions() {
               Live Sessions
             </h1>
             <p className="text-muted-foreground mt-1">
-              Join live classes or start your own session
+              Join currently active live sessions
             </p>
           </div>
 
@@ -561,15 +662,45 @@ export default function LiveSessions() {
                       <p className="text-sm text-muted-foreground">
                         with {session.host_name}
                       </p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-xs text-muted-foreground">
+                          Started {new Date(session.created_at).toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <Badge 
+                            variant={isSessionStale(session.created_at) ? "destructive" : "secondary"}
+                            className="text-xs"
+                          >
+                            {getSessionDuration(session.created_at)}
+                          </Badge>
+                          {isSessionStale(session.created_at) && (
+                            <span className="text-xs text-destructive">⚠️</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <Button 
-                      className="w-full" 
-                      variant="gradient"
-                      onClick={() => handleJoinSession(session)}
-                    >
-                      <Play className="w-4 h-4 mr-2" />
-                      Join Session
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        className="flex-1" 
+                        variant="gradient"
+                        onClick={() => handleJoinSession(session)}
+                      >
+                        <Play className="w-4 h-4 mr-2" />
+                        Join Session
+                      </Button>
+                      {session.host_id === user?.id && (
+                        <Button 
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleEndSessionFromList(session.id)}
+                        >
+                          End
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -584,9 +715,9 @@ export default function LiveSessions() {
             Upcoming Sessions
           </h2>
           
-          {scheduledSessions.length > 0 ? (
+          {upcomingSessions.length > 0 ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {scheduledSessions.map((session) => (
+              {upcomingSessions.map((session) => (
                 <Card key={session.id} className="border-border/50 shadow-card">
                   <CardContent className="p-4 space-y-4">
                     <div className="flex items-start justify-between">
