@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Play, Clock, Calendar, Video, Loader2, Download, Filter } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { EnhancedVideoPlayer } from '@/components/EnhancedVideoPlayer';
 
 interface Recording {
   id: string;
@@ -245,19 +246,19 @@ export function SessionRecordings() {
           <DialogHeader>
             <DialogTitle>{selectedRecording?.title}</DialogTitle>
           </DialogHeader>
-          <div className="aspect-video bg-black rounded-lg overflow-hidden">
+          <div className="aspect-video">
             {selectedRecording?.recording_url ? (
-              <video
+              <EnhancedVideoPlayer
                 src={selectedRecording.recording_url}
-                controls
-                autoPlay
+                title={selectedRecording.title}
                 className="w-full h-full"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-white/50">
-                <div className="text-center">
+              <div className="w-full h-full flex items-center justify-center bg-black rounded-lg">
+                <div className="text-center text-white/50">
                   <Video className="w-12 h-12 mx-auto mb-2" />
                   <p>Recording not available</p>
+                  <p className="text-sm mt-1">The recording may still be processing or failed to upload</p>
                 </div>
               </div>
             )}

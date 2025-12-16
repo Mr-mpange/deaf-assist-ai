@@ -45,17 +45,27 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
       stream.getTracks().forEach(track => combinedStream.addTrack(track.clone()));
       streamRef.current = combinedStream;
 
-      // Set up MediaRecorder with supported codec
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-        ? 'video/webm;codecs=vp9,opus'
-        : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-        ? 'video/webm;codecs=vp8,opus'
-        : 'video/webm';
+      // Set up MediaRecorder with best supported codec
+      let mimeType = 'video/webm';
+      let options: MediaRecorderOptions = {};
 
-      const mediaRecorder = new MediaRecorder(combinedStream, {
-        mimeType,
-        videoBitsPerSecond: 2500000,
-      });
+      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) {
+        mimeType = 'video/webm;codecs=vp9,opus';
+        options = { mimeType, videoBitsPerSecond: 2500000 };
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+        mimeType = 'video/webm;codecs=vp8,opus';
+        options = { mimeType, videoBitsPerSecond: 2000000 };
+      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+        mimeType = 'video/mp4';
+        options = { mimeType, videoBitsPerSecond: 2000000 };
+      } else {
+        mimeType = 'video/webm';
+        options = { mimeType };
+      }
+
+      console.log('Using recording format:', mimeType);
+
+      const mediaRecorder = new MediaRecorder(combinedStream, options);
 
       chunksRef.current = [];
 
@@ -102,18 +112,26 @@ export function useSessionRecording({ sessionId, sessionTitle, hostId }: UseSess
     const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
     try {
-      // Generate unique filename
-      const fileName = `${sessionId}/${recId}-${Date.now()}.webm`;
+      // Determine file extension based on blob type
+      const fileExtension = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      const fileName = `${sessionId}/${recId}-${Date.now()}.${fileExtension}`;
+
+      console.log('Uploading recording:', fileName, 'Size:', blob.size, 'Type:', blob.type);
 
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('session-recordings')
         .upload(fileName, blob, {
-          contentType: 'video/webm',
+          contentType: blob.type,
           upsert: false,
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      console.log('Upload successful:', uploadData);
 
       // Get public URL
       const { data: urlData } = supabase.storage

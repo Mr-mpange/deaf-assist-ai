@@ -40,11 +40,14 @@ export function useSpeechRecognition({
       try {
         const recognition = new SpeechRecognition();
         
-        // Configure recognition
+        // Configure recognition with better settings
         recognition.continuous = continuous;
         recognition.interimResults = true;
         recognition.lang = language;
-        recognition.maxAlternatives = 1;
+        recognition.maxAlternatives = 3; // Get multiple alternatives
+        
+        // Don't set grammars - it causes errors in some browsers
+        // Additional settings are handled by the browser automatically
 
         recognition.onstart = () => {
           console.log('🎤 Speech recognition started successfully');

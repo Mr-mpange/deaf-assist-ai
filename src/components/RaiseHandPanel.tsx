@@ -50,18 +50,44 @@ export function RaiseHandPanel({
 
   const startCamera = async () => {
     try {
+      console.log('🎥 Starting camera for student answer...');
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user', width: 320, height: 240 } 
+        video: { 
+          facingMode: 'user', 
+          width: { ideal: 640, max: 1280 }, 
+          height: { ideal: 480, max: 720 } 
+        },
+        audio: false // Only need video for sign detection
       });
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setIsCameraOn(true);
+        
+        console.log('✅ Camera started successfully for student');
+        
+        toast({
+          title: "Camera Ready",
+          description: "You can now show your sign language answer",
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('❌ Camera failed for student:', err);
+      
+      let errorMessage = "Could not access camera";
+      if (err.name === 'NotAllowedError') {
+        errorMessage = "Camera permission denied. Please allow camera access.";
+      } else if (err.name === 'NotFoundError') {
+        errorMessage = "No camera found. Please connect a camera.";
+      } else if (err.name === 'NotReadableError') {
+        errorMessage = "Camera is being used by another application.";
+      }
+      
       toast({
         title: "Camera Error",
-        description: "Could not access camera",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -196,9 +222,15 @@ export function RaiseHandPanel({
   // Auto-start camera when called on
   useEffect(() => {
     if (isCalledOn && !isCameraOn) {
+      console.log('🎥 Student called on - auto-starting camera');
       startCamera();
+      
+      toast({
+        title: "You've been called on!",
+        description: "Camera starting automatically for your answer",
+      });
     }
-  }, [isCalledOn]);
+  }, [isCalledOn, toast]);
 
   // Auto-start detection when camera is ready and called on
   useEffect(() => {

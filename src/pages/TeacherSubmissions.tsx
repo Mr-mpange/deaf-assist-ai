@@ -121,12 +121,7 @@ export default function TeacherSubmissions() {
         created_at: sub.created_at,
         updated_at: sub.updated_at,
         student_name: (sub.profiles as any)?.name || 'Unknown Student',
-        lesson_title: (sub.lessons as any)?.title || 'Unknown Lesson',
-        // Add mock AI prediction for demo purposes
-        ai_prediction: sub.status === 'pending' ? {
-          sign: ['HELLO', 'THANK YOU', 'PLEASE', 'A-B-C', 'GOOD'][Math.floor(Math.random() * 5)],
-          confidence: 0.85 + Math.random() * 0.15
-        } : undefined
+        lesson_title: (sub.lessons as any)?.title || 'Unknown Lesson'
       })) || [];
 
       setSubmissions(transformedSubmissions);

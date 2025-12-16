@@ -206,42 +206,131 @@ export function SignToCommunicate({ onMessageSend, className }: SignToCommunicat
       return;
     }
 
-    console.log('🔊 SPEAKING:', text);
+    console.log('🔊 ATTEMPTING TO SPEAK:', text);
 
-    if ('speechSynthesis' in window) {
-      try {
-        // Stop any current speech
-        speechSynthesis.cancel();
-        
-        // Simple, direct approach
-        setTimeout(() => {
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.rate = 0.8;
-          utterance.volume = 1.0;
-          
-          utterance.onstart = () => console.log('🎤 SPEECH STARTED:', text);
-          utterance.onend = () => console.log('✅ SPEECH ENDED:', text);
-          utterance.onerror = (e) => console.error('❌ SPEECH ERROR:', e.error);
-          
-          console.log('🚀 CALLING speechSynthesis.speak()');
-          speechSynthesis.speak(utterance);
-          
-          // Debug info
-          setTimeout(() => {
-            console.log('📊 Speech status after 100ms:', {
-              speaking: speechSynthesis.speaking,
-              pending: speechSynthesis.pending,
-              paused: speechSynthesis.paused
-            });
-          }, 100);
-          
-        }, 200);
-
-      } catch (error) {
-        console.error('💥 Speech failed:', error);
-      }
-    } else {
+    if (!('speechSynthesis' in window)) {
       console.error('❌ Speech synthesis not supported');
+      toast({
+        title: "Text-to-Speech Not Supported",
+        description: "Your browser doesn't support text-to-speech",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Cancel any ongoing speech
+      speechSynthesis.cancel();
+      
+      // Wait for voices to load (important for some browsers)
+      const speak = () => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Get available voices
+        const voices = speechSynthesis.getVoices();
+        console.log('Available voices:', voices.length);
+        
+        // Try to use a good English voice
+        const englishVoice = voices.find(voice => 
+          voice.lang.startsWith('en') && voice.localService
+        ) || voices.find(voice => 
+          voice.lang.startsWith('en')
+        ) || voices[0];
+        
+        if (englishVoice) {
+          utterance.voice = englishVoice;
+          console.log('Using voice:', englishVoice.name, englishVoice.lang);
+        }
+        
+        // Configure speech settings
+        utterance.rate = 0.9;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        utterance.lang = 'en-US';
+        
+        // Add event listeners
+        utterance.onstart = () => {
+          console.log('🎤 SPEECH STARTED:', text);
+          toast({
+            title: "Speaking",
+            description: `"${text}"`,
+          });
+        };
+        
+        utterance.onend = () => {
+          console.log('✅ SPEECH ENDED:', text);
+        };
+        
+        utterance.onerror = (e) => {
+          console.error('❌ SPEECH ERROR:', e.error, e);
+          toast({
+            title: "Speech Error",
+            description: `Could not speak: ${e.error}`,
+            variant: "destructive",
+          });
+        };
+        
+        utterance.onpause = () => console.log('⏸️ SPEECH PAUSED');
+        utterance.onresume = () => console.log('▶️ SPEECH RESUMED');
+        
+        console.log('🚀 CALLING speechSynthesis.speak() with settings:', {
+          text: utterance.text,
+          voice: utterance.voice?.name,
+          rate: utterance.rate,
+          pitch: utterance.pitch,
+          volume: utterance.volume,
+          lang: utterance.lang
+        });
+        
+        // Speak the text
+        speechSynthesis.speak(utterance);
+        
+        // Debug status after a moment
+        setTimeout(() => {
+          console.log('📊 Speech status after 500ms:', {
+            speaking: speechSynthesis.speaking,
+            pending: speechSynthesis.pending,
+            paused: speechSynthesis.paused,
+            voicesLength: speechSynthesis.getVoices().length
+          });
+          
+          // If not speaking after 1 second, there might be an issue
+          if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+            console.warn('⚠️ Speech may have failed silently');
+            toast({
+              title: "Speech Issue",
+              description: "Text-to-speech may not be working. Check your system volume.",
+              variant: "destructive",
+            });
+          }
+        }, 500);
+      };
+      
+      // Check if voices are loaded
+      const voices = speechSynthesis.getVoices();
+      if (voices.length === 0) {
+        console.log('⏳ Waiting for voices to load...');
+        // Wait for voices to load
+        speechSynthesis.onvoiceschanged = () => {
+          console.log('✅ Voices loaded, attempting speech');
+          speechSynthesis.onvoiceschanged = null; // Remove listener
+          speak();
+        };
+        
+        // Fallback timeout
+        setTimeout(() => {
+          if (speechSynthesis.getVoices().length === 0) {
+            console.warn('⚠️ No voices loaded after timeout, trying anyway');
+          }
+          speak();
+        }, 1000);
+      } else {
+        console.log('✅ Voices already available, speaking immediately');
+        speak();
+      }
+
+    } catch (error) {
+      console.error('💥 Speech failed:', error);
     }
   };
 
@@ -412,10 +501,6 @@ export function SignToCommunicate({ onMessageSend, className }: SignToCommunicat
           </ScrollArea>
         )}
 
-        <p className="text-xs text-muted-foreground text-center">
-          Hold a letter sign steady to add to word. Use "Speak" to vocalize.
-        </p>
-        
         <p className="text-xs text-muted-foreground text-center">
           Hold a letter sign steady to add to word. Use "Speak" to vocalize.
         </p>

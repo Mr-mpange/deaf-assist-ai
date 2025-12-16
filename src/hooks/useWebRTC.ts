@@ -34,6 +34,30 @@ const ICE_SERVERS = [
   { urls: 'stun:stun2.l.google.com:19302' },
 ];
 
+// Check camera permissions before requesting access
+const checkCameraPermissions = async () => {
+  try {
+    if (!navigator.permissions) {
+      console.log('Permissions API not available');
+      return 'unknown';
+    }
+    
+    const cameraPermission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+    const micPermission = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+    
+    console.log('Camera permission:', cameraPermission.state);
+    console.log('Microphone permission:', micPermission.state);
+    
+    return {
+      camera: cameraPermission.state,
+      microphone: micPermission.state
+    };
+  } catch (error) {
+    console.log('Could not check permissions:', error);
+    return 'unknown';
+  }
+};
+
 export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -49,26 +73,156 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
   const signalingChannelRef = useRef<any>(null);
   const participantsChannelRef = useRef<any>(null);
 
-  const getMediaStream = useCallback(async () => {
+  const getMediaStream = useCallback(async (retryCount = 0) => {
     try {
-      console.log('Requesting camera and microphone access...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720, facingMode: 'user' },
-        audio: { echoCancellation: true, noiseSuppression: true },
+      console.log(`🎥 [${isHost ? 'HOST' : 'STUDENT'}] Requesting camera access (attempt ${retryCount + 1})...`);
+      
+      // Check if we're on HTTPS (required for production)
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        throw new Error('HTTPS required for camera access');
+      }
+      
+      // Check permissions first
+      const permissions = await checkCameraPermissions();
+      if (permissions !== 'unknown') {
+        console.log('📋 Current permissions:', permissions);
+        if (typeof permissions === 'object' && (permissions.camera === 'denied' || permissions.microphone === 'denied')) {
+          throw new Error('Camera or microphone permission denied. Please allow access in your browser settings.');
+        }
+      }
+      
+      // Progressive fallback constraints
+      const constraintOptions = [
+        // High quality
+        {
+          video: { 
+            width: { ideal: 1280, max: 1920 }, 
+            height: { ideal: 720, max: 1080 }, 
+            facingMode: 'user',
+            frameRate: { ideal: 30, max: 60 }
+          },
+          audio: { 
+            echoCancellation: true, 
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+        },
+        // Medium quality
+        {
+          video: { 
+            width: { ideal: 640, max: 1280 }, 
+            height: { ideal: 480, max: 720 }, 
+            facingMode: 'user'
+          },
+          audio: { 
+            echoCancellation: true, 
+            noiseSuppression: true
+          },
+        },
+        // Basic quality
+        {
+          video: { 
+            width: 320, 
+            height: 240,
+            facingMode: 'user'
+          },
+          audio: true,
+        },
+        // Audio only fallback
+        {
+          video: false,
+          audio: true,
+        }
+      ];
+      
+      const constraints = constraintOptions[Math.min(retryCount, constraintOptions.length - 1)];
+      console.log('Using constraints:', constraints);
+      
+      // Add timeout to camera access (15 seconds)
+      const streamPromise = navigator.mediaDevices.getUserMedia(constraints);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Camera access timeout after 15 seconds')), 15000);
       });
       
-      console.log('Media stream obtained:', stream);
-      console.log('Video tracks:', stream.getVideoTracks());
-      console.log('Audio tracks:', stream.getAudioTracks());
+      const stream = await Promise.race([streamPromise, timeoutPromise]) as MediaStream;
+      
+      console.log('✅ Media stream obtained successfully');
+      console.log('Video tracks:', stream.getVideoTracks().length);
+      console.log('Audio tracks:', stream.getAudioTracks().length);
+      
+      // Verify tracks are active
+      const videoTrack = stream.getVideoTracks()[0];
+      const audioTrack = stream.getAudioTracks()[0];
+      
+      if (videoTrack) {
+        console.log('Video track state:', videoTrack.readyState);
+        console.log('Video track enabled:', videoTrack.enabled);
+        console.log('Video track settings:', videoTrack.getSettings());
+        
+        // Handle track ending
+        videoTrack.onended = () => {
+          console.log('Video track ended, attempting restart...');
+          retryCamera();
+        };
+      }
+      
+      if (audioTrack) {
+        console.log('Audio track state:', audioTrack.readyState);
+        console.log('Audio track enabled:', audioTrack.enabled);
+        
+        // Handle track ending
+        audioTrack.onended = () => {
+          console.log('Audio track ended, attempting restart...');
+          retryCamera();
+        };
+      }
       
       localStreamRef.current = stream;
       setLocalStream(stream);
-      return stream;
-    } catch (err) {
-      console.error('Media access error:', err);
+      
+      console.log('✅ Camera setup completed successfully');
+      
+      const hasVideo = stream.getVideoTracks().length > 0;
+      const hasAudio = stream.getAudioTracks().length > 0;
+      
       toast({
-        title: "Media Error",
-        description: "Could not access camera/microphone. Please check permissions.",
+        title: "Media Ready",
+        description: `${hasVideo ? 'Camera' : ''}${hasVideo && hasAudio ? ' and ' : ''}${hasAudio ? 'microphone' : ''} access granted`,
+      });
+      
+      return stream;
+    } catch (err: any) {
+      console.error('❌ Media access error:', err);
+      
+      // Try fallback constraints if this was the first attempt
+      if (retryCount < 3 && err.name === 'OverconstrainedError') {
+        console.log('Trying with lower quality settings...');
+        return getMediaStream(retryCount + 1);
+      }
+      
+      let errorMessage = "Could not access camera/microphone.";
+      let suggestion = "Please check your camera permissions and try again.";
+      
+      if (err.name === 'NotAllowedError') {
+        errorMessage = "Camera permission denied.";
+        suggestion = "Please allow camera access in your browser and refresh the page.";
+      } else if (err.name === 'NotFoundError') {
+        errorMessage = "No camera or microphone found.";
+        suggestion = "Please connect a camera/microphone and try again.";
+      } else if (err.name === 'NotReadableError') {
+        errorMessage = "Camera is being used by another application.";
+        suggestion = "Please close other apps using your camera and try again.";
+      } else if (err.name === 'OverconstrainedError') {
+        errorMessage = "Camera doesn't support the required settings.";
+        suggestion = "Your camera may not support the video quality settings.";
+      } else if (err.message.includes('timeout')) {
+        errorMessage = "Camera setup timed out.";
+        suggestion = "Your camera may be slow to start. Try again or restart your browser.";
+      }
+      
+      toast({
+        title: "Camera Setup Failed",
+        description: `${errorMessage} ${suggestion}`,
         variant: "destructive",
       });
       return null;
@@ -292,11 +446,19 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       let useDatabase = true;
       
       try {
-        // Test if table exists by doing a simple query
-        await supabase
+        // Test if table exists and policies work by doing a simple query
+        const { error: testError } = await supabase
           .from('session_participants')
           .select('id')
           .limit(1);
+          
+        if (testError && (testError.message.includes('infinite recursion') || testError.code === '42P17')) {
+          console.warn('Database has RLS recursion issue, using fallback mode');
+          useDatabase = false;
+        } else if (testError && testError.message.includes('does not exist')) {
+          console.warn('session_participants table does not exist');
+          useDatabase = false;
+        }
           
         // If we get here, table exists - setup database tracking
         participantsChannelRef.current = supabase.channel(`participants-${roomId}`)
@@ -378,7 +540,9 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
 
       // Fallback: Add self as participant locally if database not available
       if (!useDatabase) {
-        console.log('Adding self as participant with stream:', stream);
+        console.log('🎥 Adding self as participant with stream:', stream);
+        console.log('👤 User details:', { userId, userName, isHost });
+        
         setParticipants([{
           id: userId,
           name: userName,
@@ -390,8 +554,8 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         }]);
         
         toast({
-          title: "WebRTC Mode",
-          description: "Using direct peer-to-peer connections (database tracking unavailable)",
+          title: isHost ? "Host Mode" : "Student Mode",
+          description: isHost ? "Session started with your camera" : "Joined session with your camera",
         });
       }
 
@@ -501,32 +665,88 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     }
   }, [roomId, userId]);
 
-  const toggleVideo = useCallback(() => {
-    if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoOff(!videoTrack.enabled);
+  const toggleVideo = useCallback(async () => {
+    if (!localStreamRef.current) return;
+    
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (!videoTrack) return;
+    
+    const willTurnOff = !isVideoOff;
+    
+    if (willTurnOff) {
+      // Turn off video - just disable the track
+      videoTrack.enabled = false;
+      setIsVideoOff(true);
+    } else {
+      // Turn on video - need to restart the track properly
+      try {
+        // Stop the old track
+        videoTrack.stop();
         
-        // Update local participant state
-        setParticipants(prev => prev.map(p => 
-          p.id === userId ? { ...p, isVideoOff: !videoTrack.enabled } : p
-        ));
+        // Get a new video stream
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            width: { ideal: 1280, max: 1920 }, 
+            height: { ideal: 720, max: 1080 }, 
+            facingMode: 'user',
+            frameRate: { ideal: 30, max: 60 }
+          },
+          audio: false // Only get video, keep existing audio
+        });
         
-        // Try to update database (graceful failure)
-        if (roomId && userId) {
-          supabase
-            .from('session_participants')
-            .update({ is_video_off: !videoTrack.enabled })
-            .eq('session_id', roomId)
-            .eq('user_id', userId)
-            .catch(() => {
-              // Silently fail if database not available
-            });
-        }
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        
+        // Replace the video track in the local stream
+        localStreamRef.current.removeTrack(videoTrack);
+        localStreamRef.current.addTrack(newVideoTrack);
+        
+        // Update the stream reference
+        setLocalStream(localStreamRef.current);
+        
+        // Replace video track in all peer connections
+        peerConnectionsRef.current.forEach(async (peerConnection) => {
+          const sender = peerConnection.getSenders().find(s => 
+            s.track && s.track.kind === 'video'
+          );
+          if (sender) {
+            await sender.replaceTrack(newVideoTrack);
+          }
+        });
+        
+        setIsVideoOff(false);
+        
+        toast({
+          title: "Camera Restarted",
+          description: "Video is now active",
+        });
+      } catch (error) {
+        console.error('Error restarting video:', error);
+        toast({
+          title: "Camera Error",
+          description: "Could not restart camera. Try refreshing the page.",
+          variant: "destructive",
+        });
+        return;
       }
     }
-  }, [roomId, userId]);
+    
+    // Update local participant state
+    setParticipants(prev => prev.map(p => 
+      p.id === userId ? { ...p, isVideoOff: willTurnOff } : p
+    ));
+    
+    // Try to update database (graceful failure)
+    if (roomId && userId) {
+      supabase
+        .from('session_participants')
+        .update({ is_video_off: willTurnOff })
+        .eq('session_id', roomId)
+        .eq('user_id', userId)
+        .catch(() => {
+          // Silently fail if database not available
+        });
+    }
+  }, [roomId, userId, isVideoOff, toast]);
 
   const startScreenShare = useCallback(async () => {
     try {
@@ -599,10 +819,14 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
   // Update local participant stream when localStream changes
   useEffect(() => {
     if (localStream && userId) {
-      console.log('Updating local participant stream');
-      setParticipants(prev => prev.map(p => 
-        p.id === userId ? { ...p, stream: localStream } : p
-      ));
+      console.log('🎥 Updating local participant stream for user:', userId);
+      setParticipants(prev => {
+        const updated = prev.map(p => 
+          p.id === userId ? { ...p, stream: localStream } : p
+        );
+        console.log('📹 Updated participants with local stream:', updated);
+        return updated;
+      });
     }
   }, [localStream, userId]);
 
@@ -621,6 +845,70 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     };
   }, []);
 
+  const retryCamera = useCallback(async () => {
+    console.log('Retrying camera setup...');
+    
+    toast({
+      title: "Restarting Camera",
+      description: "Attempting to restart camera and microphone...",
+    });
+    
+    // Stop existing stream if any
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log(`Stopped ${track.kind} track`);
+      });
+      localStreamRef.current = null;
+      setLocalStream(null);
+    }
+    
+    // Wait a moment for cleanup
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Try to get media stream again
+    const stream = await getMediaStream();
+    if (stream) {
+      // Update participants with new stream
+      if (isConnected) {
+        setParticipants(prev => prev.map(p => 
+          p.id === userId ? { ...p, stream } : p
+        ));
+        
+        // Replace tracks in all peer connections
+        const videoTrack = stream.getVideoTracks()[0];
+        const audioTrack = stream.getAudioTracks()[0];
+        
+        peerConnectionsRef.current.forEach(async (peerConnection) => {
+          if (videoTrack) {
+            const videoSender = peerConnection.getSenders().find(s => 
+              s.track && s.track.kind === 'video'
+            );
+            if (videoSender) {
+              await videoSender.replaceTrack(videoTrack);
+            }
+          }
+          
+          if (audioTrack) {
+            const audioSender = peerConnection.getSenders().find(s => 
+              s.track && s.track.kind === 'audio'
+            );
+            if (audioSender) {
+              await audioSender.replaceTrack(audioTrack);
+            }
+          }
+        });
+      }
+      
+      toast({
+        title: "Camera Restarted",
+        description: "Camera and microphone are working again!",
+      });
+    }
+    
+    return !!stream;
+  }, [getMediaStream, isConnected, userId, toast]);
+
   return {
     localStream,
     participants,
@@ -635,5 +923,6 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     toggleVideo,
     startScreenShare,
     stopScreenShare,
+    retryCamera,
   };
 }

@@ -48,6 +48,8 @@ import {
   X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { EnhancedVideoPlayer } from '@/components/EnhancedVideoPlayer';
+import { RecordingDiagnostic } from '@/components/RecordingDiagnostic';
 import { Navigate } from 'react-router-dom';
 
 export default function TeacherUploads() {
@@ -57,6 +59,7 @@ export default function TeacherUploads() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLesson, setEditingLesson] = useState<any>(null);
   const [deletingLesson, setDeletingLesson] = useState<any>(null);
+  const [previewLesson, setPreviewLesson] = useState<any>(null);
   const [lessons, setLessons] = useState<Tables<'lessons'>[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -597,6 +600,14 @@ export default function TeacherUploads() {
                     <Button 
                       size="icon" 
                       variant="secondary"
+                      onClick={() => setPreviewLesson(lesson)}
+                      title="Preview video"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      size="icon" 
+                      variant="secondary"
                       onClick={() => handleEdit(lesson)}
                       title="Edit lesson"
                     >
@@ -679,6 +690,49 @@ export default function TeacherUploads() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Video Diagnostics */}
+        <RecordingDiagnostic />
+
+        {/* Video Preview Dialog */}
+        <Dialog open={!!previewLesson} onOpenChange={() => setPreviewLesson(null)}>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>{previewLesson?.title}</DialogTitle>
+              <DialogDescription>
+                {previewLesson?.description}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="aspect-video">
+              {previewLesson?.video_url ? (
+                <EnhancedVideoPlayer
+                  src={previewLesson.video_url}
+                  title={previewLesson.title}
+                  className="w-full h-full"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-black rounded-lg">
+                  <div className="text-center text-white/50">
+                    <Video className="w-12 h-12 mx-auto mb-2" />
+                    <p>No video available</p>
+                    <p className="text-sm mt-1">Video may not have been uploaded properly</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {previewLesson && (
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <Badge variant="outline">{previewLesson.category}</Badge>
+                <Badge variant="outline">{previewLesson.difficulty}</Badge>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  {previewLesson.duration} min
+                </span>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

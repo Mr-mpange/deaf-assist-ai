@@ -1,4 +1,15 @@
-import { Lesson } from '@/data/mockData';
+interface Lesson {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  difficulty: string;
+  duration: number;
+  thumbnail_url?: string;
+  video_url?: string;
+  created_at: string;
+  author_id: string;
+}
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

@@ -1,6 +1,7 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { mockLessons } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,9 +18,70 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+interface Lesson {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  difficulty: string;
+  duration: number;
+  thumbnail_url?: string;
+  video_url?: string;
+  created_at: string;
+  author_id: string;
+  views?: number;
+}
+
 export default function LessonDetail() {
   const { id } = useParams();
-  const lesson = mockLessons.find(l => l.id === id);
+  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [relatedLessons, setRelatedLessons] = useState<Lesson[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (id) {
+      fetchLesson(id);
+    }
+  }, [id]);
+
+  const fetchLesson = async (lessonId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('id', lessonId)
+        .single();
+
+      if (error) throw error;
+      setLesson(data);
+
+      // Fetch related lessons
+      if (data) {
+        const { data: related } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('category', data.category)
+          .neq('id', lessonId)
+          .limit(2);
+        
+        setRelatedLessons(related || []);
+      }
+    } catch (error) {
+      console.error('Error fetching lesson:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (!lesson) {
     return (
@@ -45,9 +107,7 @@ export default function LessonDetail() {
     advanced: 'bg-destructive/10 text-destructive border-destructive/20',
   };
 
-  const relatedLessons = mockLessons
-    .filter(l => l.category === lesson.category && l.id !== lesson.id)
-    .slice(0, 2);
+
 
   return (
     <DashboardLayout>
@@ -65,11 +125,17 @@ export default function LessonDetail() {
           <div className="lg:col-span-2 space-y-6">
             {/* Video Player */}
             <div className="relative aspect-video rounded-2xl overflow-hidden bg-foreground/5 shadow-lg">
-              <img
-                src={lesson.thumbnailUrl}
-                alt={lesson.title}
-                className="w-full h-full object-cover"
-              />
+              {lesson.thumbnail_url ? (
+                <img
+                  src={lesson.thumbnail_url}
+                  alt={lesson.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-muted flex items-center justify-center">
+                  <BookOpen className="w-16 h-16 text-muted-foreground/50" />
+                </div>
+              )}
               <div className="absolute inset-0 flex items-center justify-center bg-foreground/20">
                 <button className="w-20 h-20 rounded-full bg-primary/90 flex items-center justify-center shadow-glow hover:scale-105 transition-transform">
                   <Play className="w-8 h-8 text-primary-foreground ml-1" />
@@ -96,7 +162,7 @@ export default function LessonDetail() {
             <div className="flex flex-wrap items-center gap-6 pt-4 border-t border-border">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <User className="w-5 h-5" />
-                <span>{lesson.authorName}</span>
+                <span>Instructor</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="w-5 h-5" />
@@ -104,7 +170,7 @@ export default function LessonDetail() {
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Eye className="w-5 h-5" />
-                <span>{lesson.views.toLocaleString()} views</span>
+                <span>{lesson.views?.toLocaleString() || 0} views</span>
               </div>
             </div>
 
@@ -165,11 +231,17 @@ export default function LessonDetail() {
                       to={`/lessons/${related.id}`}
                       className="flex gap-3 group"
                     >
-                      <img
-                        src={related.thumbnailUrl}
-                        alt={related.title}
-                        className="w-24 h-16 rounded-lg object-cover"
-                      />
+                      {related.thumbnail_url ? (
+                        <img
+                          src={related.thumbnail_url}
+                          alt={related.title}
+                          className="w-24 h-16 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="w-24 h-16 rounded-lg bg-muted flex items-center justify-center">
+                          <BookOpen className="w-6 h-6 text-muted-foreground/50" />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <h4 className="font-medium text-sm line-clamp-2 group-hover:text-primary transition-colors">
                           {related.title}

@@ -1,5 +1,4 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { useHandDetectionFallback } from './useHandDetectionFallback';
 import { useHandDetectionWorking } from './useHandDetectionWorking';
 
 export interface HandLandmark {
@@ -20,19 +19,8 @@ export interface SignPrediction {
 }
 
 export function useHandDetection(videoRef: React.RefObject<HTMLVideoElement>) {
-  // Try the working version first
-  const workingDetection = useHandDetectionWorking(videoRef);
-  const fallback = useHandDetectionFallback(videoRef);
-  
-  // If working detection has an error, use fallback
-  if (workingDetection.error) {
-    console.log('Working detection failed, using fallback:', workingDetection.error);
-    return fallback;
-  }
-  
-  return workingDetection;
-
-
+  // Use the working MediaPipe implementation
+  return useHandDetectionWorking(videoRef);
 }
 
 // Full ASL Alphabet and Common Signs Classification

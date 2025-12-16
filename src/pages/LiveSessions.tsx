@@ -40,11 +40,19 @@ import { SessionRecordings } from '@/components/SessionRecordings';
 import { SignToCommunicate } from '@/components/SignToCommunicate';
 import { TeacherCommunicationPanel } from '@/components/TeacherCommunicationPanel';
 import { StudentResponsePanel } from '@/components/StudentResponsePanel';
+import { LiveSignDetectionFeed } from '@/components/LiveSignDetectionFeed';
+import { CameraDiagnostic } from '@/components/CameraDiagnostic';
 import { SpeechTest } from '@/components/SpeechTest';
-import { WebRTCDemo } from '@/components/WebRTCDemo';
-import { WebRTCSetupNotice } from '@/components/WebRTCSetupNotice';
-import { WebRTCStatus } from '@/components/WebRTCStatus';
-import { WebRTCDebug } from '@/components/WebRTCDebug';
+import { SimpleSpeechTest } from '@/components/SimpleSpeechTest';
+import { TextToSpeechTest } from '@/components/TextToSpeechTest';
+import { AudioTest } from '@/components/AudioTest';
+import { LiveSessionDiagnostic } from '@/components/LiveSessionDiagnostic';
+import { FullscreenVideoModal } from '@/components/FullscreenVideoModal';
+import { RecordingDiagnostic } from '@/components/RecordingDiagnostic';
+import { StudentCameraFix } from '@/components/StudentCameraFix';
+import { FixedSpeechTest } from '@/components/FixedSpeechTest';
+
+
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -69,9 +77,20 @@ export default function LiveSessions() {
   const [upcomingSessions, setUpcomingSessions] = useState<LiveSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [calledStudentId, setCalledStudentId] = useState<string | null>(null);
+  const [fullscreenParticipant, setFullscreenParticipant] = useState<any | null>(null);
   
   const isTeacher = role === 'teacher' || role === 'admin';
   const isHost = activeSession?.host_id === user?.id;
+
+  // Only log when we have an active session to avoid spam
+  if (activeSession) {
+    console.log('🏠 Host status check:', {
+      activeSessionHostId: activeSession?.host_id,
+      userId: user?.id,
+      isHost: isHost,
+      activeSessionTitle: activeSession?.title
+    });
+  }
 
   const {
     participants,
@@ -87,6 +106,7 @@ export default function LiveSessions() {
     toggleVideo,
     startScreenShare,
     stopScreenShare,
+    retryCamera,
   } = useWebRTC({
     roomId: activeSession?.id || '',
     userId: user?.id || '',
@@ -283,7 +303,20 @@ export default function LiveSessions() {
     setNewSessionTitle('');
     setIsCreating(false);
     
-    const callStarted = await startCall();
+    console.log('🎥 Host starting call for session:', data.id);
+    
+    // Give a moment for state to update
+    setTimeout(async () => {
+      const callStarted = await startCall();
+      
+      if (!callStarted) {
+        toast({
+          title: "Camera Setup Failed",
+          description: "Could not start camera. Check permissions and try again.",
+          variant: "destructive",
+        });
+      }
+    }, 100);
     
     toast({
       title: "Session Created",
@@ -334,6 +367,39 @@ export default function LiveSessions() {
 
   const handleEndSessionFromList = async (sessionId: string) => {
     try {
+      console.log('Attempting to end session:', sessionId);
+      console.log('Current user:', user?.id);
+      
+      // First check if user is the host
+      const { data: sessionData, error: fetchError } = await supabase
+        .from('live_sessions')
+        .select('host_id, title')
+        .eq('id', sessionId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching session:', fetchError);
+        throw new Error('Could not verify session ownership');
+      }
+
+      if (sessionData.host_id !== user?.id) {
+        throw new Error('Only the session host can end the session');
+      }
+
+      console.log('User is host, proceeding to end session...');
+
+      // Try to manually clean up participants first (ignore errors)
+      try {
+        await supabase
+          .from('session_participants')
+          .delete()
+          .eq('session_id', sessionId);
+        console.log('Participants cleaned up');
+      } catch (cleanupError) {
+        console.warn('Could not clean up participants (this is OK):', cleanupError);
+      }
+
+      // Now end the session
       const { error } = await supabase
         .from('live_sessions')
         .update({ 
@@ -342,20 +408,48 @@ export default function LiveSessions() {
         })
         .eq('id', sessionId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error ending session:', error);
+        
+        // If we get the recursion error, try a different approach
+        if (error.code === '42P17' || error.message.includes('infinite recursion')) {
+          console.log('Trying alternative approach due to RLS recursion...');
+          
+          // Use RPC call to bypass RLS
+          const { error: rpcError } = await supabase.rpc('end_session_manual', {
+            session_id: sessionId,
+            user_id: user?.id
+          });
+          
+          if (rpcError) {
+            throw new Error('Could not end session due to database policy issues. Please contact support.');
+          }
+        } else {
+          throw error;
+        }
+      }
+
+      console.log('Session ended successfully');
 
       toast({
         title: "Session Ended",
-        description: "The live session has been ended successfully.",
+        description: `"${sessionData.title}" has been ended successfully.`,
       });
 
       // Refresh sessions
       fetchSessions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error ending session:', error);
+      
+      let errorMessage = error.message || "Failed to end session";
+      
+      if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
+        errorMessage = "Database policy issue detected. Please run the fix script in your Supabase SQL editor.";
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to end session",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -433,7 +527,11 @@ export default function LiveSessions() {
                   </div>
                 )}
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground text-center">
+                    💡 Click on any video to view in fullscreen
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {isScreenSharing && screenStream && (
                     <div className="md:col-span-2">
                       <VideoTile
@@ -441,6 +539,15 @@ export default function LiveSessions() {
                         name="Screen Share"
                         isScreenShare
                         className="h-full"
+                        onClick={() => setFullscreenParticipant({
+                          stream: screenStream,
+                          name: "Screen Share",
+                          isScreenShare: true,
+                          isHost: false,
+                          isMuted: false,
+                          isVideoOff: false,
+                          isLocal: false
+                        })}
                       />
                     </div>
                   )}
@@ -454,8 +561,19 @@ export default function LiveSessions() {
                       isMuted={participant.id === user?.id ? isMuted : participant.isMuted}
                       isVideoOff={participant.id === user?.id ? isVideoOff : participant.isVideoOff}
                       isLocal={participant.id === user?.id}
+                      onRetryCamera={participant.id === user?.id ? retryCamera : undefined}
+                      onClick={() => setFullscreenParticipant({
+                        stream: participant.stream,
+                        name: participant.name,
+                        isHost: participant.isHost,
+                        isMuted: participant.id === user?.id ? isMuted : participant.isMuted,
+                        isVideoOff: participant.id === user?.id ? isVideoOff : participant.isVideoOff,
+                        isLocal: participant.id === user?.id,
+                        isScreenShare: false
+                      })}
                     />
                   ))}
+                  </div>
                 </div>
               </div>
 
@@ -526,13 +644,6 @@ export default function LiveSessions() {
 
             {/* Sidebar */}
             <div className="space-y-4">
-              {/* Debug Info */}
-              <WebRTCDebug 
-                localStream={localStream}
-                participants={participants}
-                isConnected={isConnected}
-              />
-
               {/* Teacher: Communication Panel */}
               {isHost && (
                 <TeacherCommunicationPanel
@@ -589,6 +700,34 @@ export default function LiveSessions() {
                 </CardContent>
               </Card>
 
+              {/* Student Camera Fix Helper */}
+              {user && (
+                <StudentCameraFix 
+                  isStudent={!isHost}
+                  hasStream={!!localStream}
+                  onRetryCamera={retryCamera}
+                />
+              )}
+
+              {/* Live Session Diagnostics - for debugging */}
+              {user && (
+                <LiveSessionDiagnostic 
+                  sessionId={activeSession.id}
+                  userId={user.id}
+                  isHost={isHost}
+                />
+              )}
+
+              {/* Live Sign Detection Feed - for all users */}
+              {user && profile && (
+                <LiveSignDetectionFeed 
+                  sessionId={activeSession.id}
+                  participantId={user.id}
+                  participantName={profile.name}
+                  className="max-h-[400px]"
+                />
+              )}
+
               {/* Sign to Communicate - for all users */}
               <SignToCommunicate className="max-h-[300px]" />
               
@@ -596,6 +735,19 @@ export default function LiveSessions() {
               <SpeechTest />
             </div>
           </div>
+
+          {/* Fullscreen Video Modal */}
+          <FullscreenVideoModal
+            isOpen={!!fullscreenParticipant}
+            onClose={() => setFullscreenParticipant(null)}
+            stream={fullscreenParticipant?.stream}
+            name={fullscreenParticipant?.name || ''}
+            isHost={fullscreenParticipant?.isHost || false}
+            isMuted={fullscreenParticipant?.isMuted || false}
+            isVideoOff={fullscreenParticipant?.isVideoOff || false}
+            isLocal={fullscreenParticipant?.isLocal || false}
+            isScreenShare={fullscreenParticipant?.isScreenShare || false}
+          />
         </div>
       </DashboardLayout>
     );
@@ -656,11 +808,7 @@ export default function LiveSessions() {
           )}
         </div>
 
-        {/* Status and Setup */}
-        <div className="grid md:grid-cols-2 gap-4">
-          <WebRTCStatus />
-          <WebRTCSetupNotice />
-        </div>
+
 
         {/* Live Now */}
         {liveSessions.length > 0 && (
@@ -728,7 +876,11 @@ export default function LiveSessions() {
                         <Button 
                           variant="destructive"
                           size="sm"
-                          onClick={() => handleEndSessionFromList(session.id)}
+                          onClick={() => {
+                            if (confirm(`Are you sure you want to end "${session.title}"? This will disconnect all participants.`)) {
+                              handleEndSessionFromList(session.id);
+                            }
+                          }}
                         >
                           End
                         </Button>
@@ -822,13 +974,25 @@ export default function LiveSessions() {
 
         <SpeechTest />
 
-        {/* WebRTC Demo - for testing */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">WebRTC Testing</h2>
-            <WebRTCDemo />
-          </div>
-        )}
+        {/* Simple Speech Test */}
+        <SimpleSpeechTest />
+
+        {/* Text-to-Speech Test */}
+        <TextToSpeechTest />
+
+        {/* Audio System Test */}
+        <AudioTest />
+
+        {/* Fixed Speech Test */}
+        <FixedSpeechTest />
+
+        {/* Camera Diagnostics */}
+        <CameraDiagnostic />
+
+        {/* Recording Diagnostics */}
+        <RecordingDiagnostic />
+
+
       </div>
     </DashboardLayout>
   );

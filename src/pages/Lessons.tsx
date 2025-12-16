@@ -1,22 +1,56 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { LessonCard } from '@/components/cards/LessonCard';
-import { mockLessons } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, Filter, BookOpen } from 'lucide-react';
+import { Search, Filter, BookOpen, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const categories = ['All', 'Basics', 'Vocabulary', 'Conversation', 'Grammar'];
+interface Lesson {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  difficulty: string;
+  duration: number;
+  thumbnail_url?: string;
+  video_url?: string;
+  created_at: string;
+  author_id: string;
+}
+
 const difficulties = ['All', 'beginner', 'intermediate', 'advanced'];
 
 export default function Lessons() {
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedDifficulty, setSelectedDifficulty] = useState('All');
 
-  const filteredLessons = mockLessons.filter((lesson) => {
+  useEffect(() => {
+    fetchLessons();
+  }, []);
+
+  const fetchLessons = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('lessons')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setLessons(data || []);
+    } catch (error) {
+      console.error('Error fetching lessons:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredLessons = lessons.filter((lesson) => {
     const matchesSearch = lesson.title.toLowerCase().includes(search.toLowerCase()) ||
                          lesson.description.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || lesson.category === selectedCategory;
@@ -24,6 +58,8 @@ export default function Lessons() {
     
     return matchesSearch && matchesCategory && matchesDifficulty;
   });
+
+  const categories = ['All', ...Array.from(new Set(lessons.map(lesson => lesson.category)))];
 
   return (
     <DashboardLayout>
@@ -94,32 +130,47 @@ export default function Lessons() {
 
         {/* Results */}
         <div>
-          <p className="text-sm text-muted-foreground mb-4">
-            Showing {filteredLessons.length} lesson{filteredLessons.length !== 1 ? 's' : ''}
-          </p>
-
-          {filteredLessons.length > 0 ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredLessons.map((lesson) => (
-                <LessonCard key={lesson.id} lesson={lesson} />
-              ))}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="text-center py-12">
-              <BookOpen className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-              <p className="text-muted-foreground">No lessons found matching your criteria</p>
-              <Button 
-                variant="ghost" 
-                className="mt-4"
-                onClick={() => {
-                  setSearch('');
-                  setSelectedCategory('All');
-                  setSelectedDifficulty('All');
-                }}
-              >
-                Clear filters
-              </Button>
-            </div>
+            <>
+              <p className="text-sm text-muted-foreground mb-4">
+                Showing {filteredLessons.length} lesson{filteredLessons.length !== 1 ? 's' : ''}
+              </p>
+
+              {filteredLessons.length > 0 ? (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredLessons.map((lesson) => (
+                    <LessonCard key={lesson.id} lesson={lesson} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <BookOpen className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <p className="text-muted-foreground">
+                    {lessons.length === 0 
+                      ? "No lessons available yet" 
+                      : "No lessons found matching your criteria"
+                    }
+                  </p>
+                  {lessons.length > 0 && (
+                    <Button 
+                      variant="ghost" 
+                      className="mt-4"
+                      onClick={() => {
+                        setSearch('');
+                        setSelectedCategory('All');
+                        setSelectedDifficulty('All');
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

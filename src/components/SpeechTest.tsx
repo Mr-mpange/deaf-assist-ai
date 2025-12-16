@@ -33,9 +33,61 @@ export function SpeechTest() {
   });
 
   const testSpeech = () => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance('Hello, this is a test of text to speech');
+    if (!('speechSynthesis' in window)) {
+      console.error('Speech synthesis not supported');
+      return;
+    }
+
+    try {
+      // Cancel any ongoing speech
+      speechSynthesis.cancel();
+      
+      const text = 'Hello, this is a test of text to speech. Can you hear me?';
+      console.log('🔊 Testing speech:', text);
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Configure for better compatibility
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      utterance.lang = 'en-US';
+      
+      // Get available voices
+      const voices = speechSynthesis.getVoices();
+      console.log('Available voices:', voices.length);
+      
+      if (voices.length > 0) {
+        // Try to find a good English voice
+        const englishVoice = voices.find(voice => 
+          voice.lang.includes('en') && voice.localService
+        ) || voices.find(voice => 
+          voice.lang.includes('en')
+        ) || voices[0];
+        
+        if (englishVoice) {
+          utterance.voice = englishVoice;
+          console.log('Using voice:', englishVoice.name, englishVoice.lang);
+        }
+      }
+      
+      utterance.onstart = () => console.log('✅ Speech started');
+      utterance.onend = () => console.log('✅ Speech ended');
+      utterance.onerror = (e) => console.error('❌ Speech error:', e.error);
+      
       speechSynthesis.speak(utterance);
+      
+      // Debug info
+      setTimeout(() => {
+        console.log('Speech status:', {
+          speaking: speechSynthesis.speaking,
+          pending: speechSynthesis.pending,
+          paused: speechSynthesis.paused
+        });
+      }, 500);
+      
+    } catch (error) {
+      console.error('Speech test failed:', error);
     }
   };
 
@@ -140,6 +192,7 @@ export function SpeechTest() {
           </Button>
           <Button variant="outline" onClick={testSpeech}>
             <Volume2 className="w-4 h-4" />
+            Test Speech
           </Button>
         </div>
 
@@ -208,11 +261,22 @@ export function SpeechTest() {
         )}
 
         {!isSupported && (
-          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded text-sm">
+          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded text-sm space-y-2">
             <p className="font-medium text-destructive">Speech Recognition Not Supported</p>
-            <p className="text-muted-foreground mt-1">
-              Try using Chrome, Edge, or Safari. Make sure you're on HTTPS or localhost.
-            </p>
+            <div className="text-muted-foreground space-y-1">
+              <p><strong>Current Status:</strong></p>
+              <p>• Protocol: {window.location.protocol}</p>
+              <p>• Host: {window.location.hostname}</p>
+              <p>• Browser: {navigator.userAgent.includes('Chrome') ? 'Chrome' : navigator.userAgent.includes('Firefox') ? 'Firefox' : navigator.userAgent.includes('Safari') ? 'Safari' : navigator.userAgent.includes('Edge') ? 'Edge' : 'Unknown'}</p>
+              <p>• SpeechRecognition: {(window as any).SpeechRecognition ? 'Available' : 'Not Available'}</p>
+              <p>• webkitSpeechRecognition: {(window as any).webkitSpeechRecognition ? 'Available' : 'Not Available'}</p>
+            </div>
+            <div className="text-muted-foreground space-y-1">
+              <p><strong>Requirements:</strong></p>
+              <p>• Use Chrome, Edge, or Safari browser</p>
+              <p>• Must be HTTPS (or localhost for testing)</p>
+              <p>• Allow microphone permissions</p>
+            </div>
           </div>
         )}
 
