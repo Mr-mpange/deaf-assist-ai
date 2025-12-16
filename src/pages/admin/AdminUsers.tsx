@@ -113,7 +113,7 @@ export default function AdminUsers() {
         };
       }) || [];
 
-      console.log('Fetched users:', combinedUsers);
+      // Users fetched successfully
       setUsers(combinedUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -221,7 +221,7 @@ export default function AdminUsers() {
     if (!editingUser) return;
 
     try {
-      console.log('Updating user:', editingUser);
+      // Updating user role
 
       // Create admin client that bypasses RLS
       const { data: { session } } = await supabase.auth.getSession();
@@ -237,10 +237,10 @@ export default function AdminUsers() {
         new_role: editingUser.role
       });
 
-      console.log('RPC update result:', { rpcResult, rpcError });
+      // RPC update completed result:', { rpcResult, rpcError });
 
       if (rpcError || (rpcResult && !rpcResult.success)) {
-        console.log('RPC failed, trying direct update...');
+        // RPC failed, trying direct update
         
         // Fallback: Try direct update (will work if RLS policies are set up)
         const { error: directProfileError } = await supabase
@@ -274,7 +274,7 @@ export default function AdminUsers() {
         }
       }
 
-      console.log('Role update result:', { roleError });
+      // Role update completed
 
       if (roleError) {
         console.error('Role update error:', roleError);

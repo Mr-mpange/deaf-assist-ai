@@ -159,7 +159,7 @@ export default function TeacherUploads() {
 
       // If bucket doesn't exist, try session-recordings as fallback
       if (error && error.message.includes('bucket')) {
-        console.log('lesson-videos bucket not found, using session-recordings as fallback');
+        // Using session-recordings as fallback bucket
         const fallbackFileName = `lessons/${fileName}`;
         const result = await supabase.storage
           .from('session-recordings')

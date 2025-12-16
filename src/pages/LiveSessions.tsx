@@ -82,15 +82,7 @@ export default function LiveSessions() {
   const isTeacher = role === 'teacher' || role === 'admin';
   const isHost = activeSession?.host_id === user?.id;
 
-  // Only log when we have an active session to avoid spam
-  if (activeSession) {
-    console.log('🏠 Host status check:', {
-      activeSessionHostId: activeSession?.host_id,
-      userId: user?.id,
-      isHost: isHost,
-      activeSessionTitle: activeSession?.title
-    });
-  }
+  // Host status tracking for active session
 
   const {
     participants,
@@ -303,7 +295,7 @@ export default function LiveSessions() {
     setNewSessionTitle('');
     setIsCreating(false);
     
-    console.log('🎥 Host starting call for session:', data.id);
+    // Starting call for new session
     
     // Give a moment for state to update
     setTimeout(async () => {
@@ -367,8 +359,7 @@ export default function LiveSessions() {
 
   const handleEndSessionFromList = async (sessionId: string) => {
     try {
-      console.log('Attempting to end session:', sessionId);
-      console.log('Current user:', user?.id);
+      // Attempting to end session
       
       // First check if user is the host
       const { data: sessionData, error: fetchError } = await supabase
@@ -386,7 +377,7 @@ export default function LiveSessions() {
         throw new Error('Only the session host can end the session');
       }
 
-      console.log('User is host, proceeding to end session...');
+      // User verified as host, proceeding to end session
 
       // Try to manually clean up participants first (ignore errors)
       try {
@@ -394,9 +385,9 @@ export default function LiveSessions() {
           .from('session_participants')
           .delete()
           .eq('session_id', sessionId);
-        console.log('Participants cleaned up');
+        // Participants cleaned up successfully
       } catch (cleanupError) {
-        console.warn('Could not clean up participants (this is OK):', cleanupError);
+        // Could not clean up participants (this is OK)
       }
 
       // Now end the session
@@ -413,7 +404,7 @@ export default function LiveSessions() {
         
         // If we get the recursion error, try a different approach
         if (error.code === '42P17' || error.message.includes('infinite recursion')) {
-          console.log('Trying alternative approach due to RLS recursion...');
+          // Trying alternative approach due to RLS recursion
           
           // Use RPC call to bypass RLS
           const { error: rpcError } = await supabase.rpc('end_session_manual', {
@@ -429,7 +420,7 @@ export default function LiveSessions() {
         }
       }
 
-      console.log('Session ended successfully');
+      // Session ended successfully
 
       toast({
         title: "Session Ended",
