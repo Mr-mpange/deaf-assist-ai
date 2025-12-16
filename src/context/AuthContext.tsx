@@ -37,8 +37,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('user_id', userId)
       .maybeSingle();
     
+    if (error) {
+      console.error('Error fetching profile:', error);
+    }
+    
     if (data) {
+      console.log('Profile data loaded:', data);
       setProfile(data);
+    } else {
+      console.log('No profile data found for user:', userId);
     }
   };
 

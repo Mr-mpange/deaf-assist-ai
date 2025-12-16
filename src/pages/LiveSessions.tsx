@@ -69,6 +69,18 @@ interface LiveSession {
 
 export default function LiveSessions() {
   const { user, profile, role } = useAuth();
+  
+  // Debug profile data
+  useEffect(() => {
+    if (user && profile) {
+      console.log('👤 LiveSessions - User profile loaded:', {
+        userId: user.id,
+        profileName: profile.name,
+        userEmail: user.email,
+        role: role
+      });
+    }
+  }, [user, profile, role]);
   const { toast } = useToast();
   const [isCreating, setIsCreating] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
@@ -102,7 +114,7 @@ export default function LiveSessions() {
   } = useWebRTC({
     roomId: activeSession?.id || '',
     userId: user?.id || '',
-    userName: profile?.name || 'Anonymous',
+    userName: profile?.name || user?.email?.split('@')[0] || user?.id?.slice(0, 8) || 'Anonymous',
     isHost: isHost,
   });
 
@@ -716,6 +728,7 @@ export default function LiveSessions() {
                   participantId={user.id}
                   participantName={profile.name}
                   className="max-h-[400px]"
+                  autoStart={isHost}
                 />
               )}
 

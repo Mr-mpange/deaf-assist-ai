@@ -32,8 +32,24 @@ export function FullscreenVideoModal({
 
   useEffect(() => {
     if (videoRef.current && stream && isOpen) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(console.error);
+      const video = videoRef.current;
+      video.srcObject = stream;
+      
+      // Ensure video plays
+      const playVideo = async () => {
+        try {
+          await video.play();
+        } catch (error) {
+          // Video play failed, but this is common and usually not critical
+          setTimeout(() => {
+            video.play().catch(() => {
+              // Final attempt failed, but don't show error to user
+            });
+          }, 100);
+        }
+      };
+      
+      playVideo();
     }
   }, [stream, isOpen]);
 
@@ -76,10 +92,12 @@ export function FullscreenVideoModal({
               playsInline
               muted={isLocal}
               onClick={(e) => e.stopPropagation()}
-              className={cn(
-                isLocal && !isScreenShare && "transform scale-x-[-1]"
-              )}
-              style={{ backgroundColor: '#000' }}
+              className="max-w-full max-h-full object-contain"
+              style={{ 
+                backgroundColor: '#000',
+                width: 'auto',
+                height: 'auto'
+              }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center text-white">
@@ -88,8 +106,10 @@ export function FullscreenVideoModal({
                   {name.charAt(0).toUpperCase()}
                 </span>
               </div>
-              {isVideoOff && (
+              {isVideoOff ? (
                 <p className="text-xl text-muted-foreground">Camera is off</p>
+              ) : (
+                <p className="text-xl text-muted-foreground">No video stream available</p>
               )}
             </div>
           )}

@@ -35,13 +35,15 @@ interface LiveSignDetectionFeedProps {
   participantId: string;
   participantName: string;
   className?: string;
+  autoStart?: boolean;
 }
 
 export function LiveSignDetectionFeed({ 
   sessionId, 
   participantId, 
   participantName, 
-  className 
+  className,
+  autoStart = false
 }: LiveSignDetectionFeedProps) {
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -59,6 +61,45 @@ export function LiveSignDetectionFeed({
   
   const { toast } = useToast();
   const { isLoading: isModelLoading, results, detectHands, drawLandmarks } = useHandDetection(videoRef);
+
+  // Auto-start camera and detection if enabled
+  useEffect(() => {
+    if (autoStart && sessionId && !isCameraOn) {
+      // Small delay to ensure component is mounted
+      const timer = setTimeout(async () => {
+        try {
+          await startCamera();
+          
+          toast({
+            title: "Sign Detection Started",
+            description: "Automatically detecting sign language for teaching",
+          });
+          
+          // Start detection after camera is ready
+          setTimeout(() => {
+            if (!isModelLoading) {
+              startDetection();
+            }
+          }, 1000);
+        } catch (error) {
+          console.error('Auto-start failed:', error);
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [autoStart, sessionId, isCameraOn, isModelLoading, toast]);
+
+  // Auto-start detection when model is ready (for auto-start mode)
+  useEffect(() => {
+    if (autoStart && isCameraOn && !isDetecting && !isModelLoading) {
+      const timer = setTimeout(() => {
+        startDetection();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [autoStart, isCameraOn, isDetecting, isModelLoading, startDetection]);
 
   // Subscribe to sign messages from all participants
   useEffect(() => {
@@ -296,6 +337,11 @@ export function LiveSignDetectionFeed({
             <Badge variant="secondary" className="text-xs">
               {signMessages.length}
             </Badge>
+            {autoStart && (
+              <Badge variant="default" className="text-xs bg-green-600">
+                Auto
+              </Badge>
+            )}
           </span>
           <Button variant="ghost" size="sm" onClick={toggleVisibility}>
             {isVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}

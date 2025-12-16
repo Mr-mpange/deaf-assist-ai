@@ -150,10 +150,7 @@ export function VideoTile({
                 muted={isLocal}
                 controls={false}
                 disablePictureInPicture
-                className={cn(
-                  "w-full h-full object-cover",
-                  isLocal && !isScreenShare && "transform scale-x-[-1]"
-                )}
+                className="w-full h-full object-cover"
                 style={{ backgroundColor: '#000' }}
                 onLoadedMetadata={() => {
                   console.log('Video metadata loaded for:', name);

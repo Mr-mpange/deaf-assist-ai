@@ -59,6 +59,7 @@ const checkCameraPermissions = async () => {
 };
 
 export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions) {
+  console.log('🎭 WebRTC initialized with:', { roomId, userId, userName, isHost });
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -373,13 +374,14 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
 
   // Add participant (with WebRTC connection)
   const addParticipant = useCallback((participantData: any) => {
-    console.log('Adding participant:', participantData);
-    console.log('Current user ID:', userId);
-    console.log('Local stream available:', !!localStream);
+    console.log('🔍 Adding participant:', participantData);
+    console.log('🔍 Participant name from DB:', participantData.name);
+    console.log('🔍 Current user ID:', userId);
+    console.log('🔍 Local stream available:', !!localStream);
     
     const newParticipant: Participant = {
       id: participantData.user_id,
-      name: participantData.name,
+      name: participantData.name || `User ${participantData.user_id.slice(0, 8)}`,
       isHost: participantData.is_host,
       isMuted: participantData.is_muted || false,
       isVideoOff: participantData.is_video_off || false,
@@ -542,6 +544,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       if (!useDatabase) {
         console.log('🎥 Adding self as participant with stream:', stream);
         console.log('👤 User details:', { userId, userName, isHost });
+        console.log('🎭 Creating local participant with name:', userName);
         
         setParticipants([{
           id: userId,
