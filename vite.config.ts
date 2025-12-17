@@ -20,10 +20,16 @@ export default defineConfig(({ mode }) => ({
     exclude: ['@mediapipe/hands'],
   },
   build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    sourcemap: true, // Enable sourcemaps for debugging
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        manualChunks: undefined, // Disable manual chunking to avoid initialization issues
       },
+    },
+    commonjsOptions: {
+      transformMixedEsModules: true,
     },
   },
 }));

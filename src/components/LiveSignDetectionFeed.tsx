@@ -90,6 +90,20 @@ export function LiveSignDetectionFeed({
     }
   }, [autoStart, sessionId, isCameraOn, isModelLoading, toast]);
 
+  // Define startDetection before using it in effects
+  const startDetection = useCallback(() => {
+    if (!isCameraOn || isModelLoading) return;
+    
+    setIsDetecting(true);
+    
+    const detect = async () => {
+      await detectHands();
+      animationFrameRef.current = requestAnimationFrame(detect);
+    };
+    
+    detect();
+  }, [isCameraOn, isModelLoading, detectHands]);
+
   // Auto-start detection when model is ready (for auto-start mode)
   useEffect(() => {
     if (autoStart && isCameraOn && !isDetecting && !isModelLoading) {
@@ -194,19 +208,6 @@ export function LiveSignDetectionFeed({
     setIsCameraOn(false);
     setIsDetecting(false);
   };
-
-  const startDetection = useCallback(() => {
-    if (!isCameraOn || isModelLoading) return;
-    
-    setIsDetecting(true);
-    
-    const detect = async () => {
-      await detectHands();
-      animationFrameRef.current = requestAnimationFrame(detect);
-    };
-    
-    detect();
-  }, [isCameraOn, isModelLoading, detectHands]);
 
   const stopDetection = () => {
     if (animationFrameRef.current) {

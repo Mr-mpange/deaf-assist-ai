@@ -37,20 +37,10 @@ import { VideoTile } from '@/components/VideoTile';
 import { RaiseHandPanel } from '@/components/RaiseHandPanel';
 import { TeacherRaisedHandsPanel } from '@/components/TeacherRaisedHandsPanel';
 import { SessionRecordings } from '@/components/SessionRecordings';
-import { SignToCommunicate } from '@/components/SignToCommunicate';
 import { TeacherCommunicationPanel } from '@/components/TeacherCommunicationPanel';
 import { StudentResponsePanel } from '@/components/StudentResponsePanel';
-import { LiveSignDetectionFeed } from '@/components/LiveSignDetectionFeed';
-import { CameraDiagnostic } from '@/components/CameraDiagnostic';
-import { SpeechTest } from '@/components/SpeechTest';
-import { SimpleSpeechTest } from '@/components/SimpleSpeechTest';
-import { TextToSpeechTest } from '@/components/TextToSpeechTest';
-import { AudioTest } from '@/components/AudioTest';
-import { LiveSessionDiagnostic } from '@/components/LiveSessionDiagnostic';
 import { FullscreenVideoModal } from '@/components/FullscreenVideoModal';
-import { RecordingDiagnostic } from '@/components/RecordingDiagnostic';
 import { StudentCameraFix } from '@/components/StudentCameraFix';
-import { FixedSpeechTest } from '@/components/FixedSpeechTest';
 
 
 
@@ -307,42 +297,46 @@ export default function LiveSessions() {
     setNewSessionTitle('');
     setIsCreating(false);
     
-    // Starting call for new session
-    
-    // Give a moment for state to update
-    setTimeout(async () => {
-      const callStarted = await startCall();
-      
-      if (!callStarted) {
-        toast({
-          title: "Camera Setup Failed",
-          description: "Could not start camera. Check permissions and try again.",
-          variant: "destructive",
-        });
-      }
-    }, 100);
-    
     toast({
       title: "Session Created",
       description: `"${data.title}" is now live!`,
     });
-
-    // Auto-start recording for the session
-    if (callStarted && localStream) {
-      setTimeout(() => {
-        if (localStream) {
-          startRecording(localStream);
-        }
-      }, 1000);
-    }
     
     fetchSessions();
   };
 
   const handleJoinSession = async (session: LiveSession) => {
     setActiveSession(session);
-    await startCall();
   };
+
+  // Auto-start call when session becomes active
+  useEffect(() => {
+    if (activeSession && !isConnected) {
+      console.log('🚀 Auto-starting call for session:', activeSession.id);
+      
+      // Small delay to ensure state is fully updated
+      const timer = setTimeout(async () => {
+        const callStarted = await startCall();
+        
+        if (!callStarted) {
+          toast({
+            title: "Camera Setup Failed",
+            description: "Could not start camera. Check permissions and try again.",
+            variant: "destructive",
+          });
+        } else if (isHost && localStream) {
+          // Auto-start recording for host after camera is ready
+          setTimeout(() => {
+            if (localStream) {
+              startRecording(localStream);
+            }
+          }, 1000);
+        }
+      }, 200);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [activeSession, isConnected, isHost, startCall, toast]);
 
   const handleEndSession = async () => {
     // Stop recording first
@@ -681,6 +675,7 @@ export default function LiveSessions() {
                   isCalledOn={calledStudentId === user.id}
                   onAnswerSubmitted={handleAnswerSubmitted}
                   onLowerHand={() => setCalledStudentId(null)}
+                  liveStream={localStream}
                 />
               )}
 
@@ -711,32 +706,6 @@ export default function LiveSessions() {
                   onRetryCamera={retryCamera}
                 />
               )}
-
-              {/* Live Session Diagnostics - for debugging */}
-              {user && (
-                <LiveSessionDiagnostic 
-                  sessionId={activeSession.id}
-                  userId={user.id}
-                  isHost={isHost}
-                />
-              )}
-
-              {/* Live Sign Detection Feed - for all users */}
-              {user && profile && (
-                <LiveSignDetectionFeed 
-                  sessionId={activeSession.id}
-                  participantId={user.id}
-                  participantName={profile.name}
-                  className="max-h-[400px]"
-                  autoStart={isHost}
-                />
-              )}
-
-              {/* Sign to Communicate - for all users */}
-              <SignToCommunicate className="max-h-[300px]" />
-              
-              {/* Speech Test - for debugging */}
-              <SpeechTest />
             </div>
           </div>
 
@@ -975,27 +944,6 @@ export default function LiveSessions() {
             </div>
           </CardContent>
         </Card>
-
-        <SpeechTest />
-
-        {/* Simple Speech Test */}
-        <SimpleSpeechTest />
-
-        {/* Text-to-Speech Test */}
-        <TextToSpeechTest />
-
-        {/* Audio System Test */}
-        <AudioTest />
-
-        {/* Fixed Speech Test */}
-        <FixedSpeechTest />
-
-        {/* Camera Diagnostics */}
-        <CameraDiagnostic />
-
-        {/* Recording Diagnostics */}
-        <RecordingDiagnostic />
-
 
       </div>
     </DashboardLayout>

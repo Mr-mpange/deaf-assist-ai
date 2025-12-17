@@ -187,36 +187,102 @@ export function TeacherCommunicationPanel({
   const speakMessage = (text: string) => {
     if (!text.trim()) {
       console.log('🔇 No text to speak');
+      toast({
+        title: "No Text",
+        description: "Please enter text to speak",
+        variant: "destructive",
+      });
       return;
     }
 
     console.log('🔊 [TeacherPanel] SPEAKING:', text);
 
-    if ('speechSynthesis' in window) {
-      try {
-        // Stop any current speech
-        speechSynthesis.cancel();
-        
-        // Simple, direct approach
-        setTimeout(() => {
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.rate = 0.8;
-          utterance.volume = 1.0;
-          
-          utterance.onstart = () => console.log('🎤 [TeacherPanel] SPEECH STARTED:', text);
-          utterance.onend = () => console.log('✅ [TeacherPanel] SPEECH ENDED:', text);
-          utterance.onerror = (e) => console.error('❌ [TeacherPanel] SPEECH ERROR:', e.error);
-          
-          console.log('🚀 [TeacherPanel] CALLING speechSynthesis.speak()');
-          speechSynthesis.speak(utterance);
-          
-        }, 200);
-
-      } catch (error) {
-        console.error('💥 [TeacherPanel] Speech failed:', error);
-      }
-    } else {
+    if (!('speechSynthesis' in window)) {
       console.error('❌ [TeacherPanel] Speech synthesis not supported');
+      toast({
+        title: "Not Supported",
+        description: "Text-to-speech is not supported in your browser",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Stop any current speech
+      speechSynthesis.cancel();
+      
+      // Wait for voices to load
+      const speak = () => {
+        const utterance = new SpeechSynthesisUtterance(text.trim());
+        utterance.rate = 0.85;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        utterance.lang = 'en-US';
+        
+        // Try to get a good voice
+        const voices = speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          // Prefer English voices
+          const englishVoice = voices.find(voice => 
+            voice.lang.includes('en') && !voice.name.includes('Google')
+          ) || voices.find(voice => voice.lang.includes('en')) || voices[0];
+          utterance.voice = englishVoice;
+          console.log('🎤 Using voice:', englishVoice.name);
+        }
+        
+        utterance.onstart = () => {
+          console.log('🎤 [TeacherPanel] SPEECH STARTED:', text);
+          toast({
+            title: "Speaking",
+            description: "Playing text-to-speech...",
+          });
+        };
+        
+        utterance.onend = () => {
+          console.log('✅ [TeacherPanel] SPEECH ENDED:', text);
+        };
+        
+        utterance.onerror = (e) => {
+          console.error('❌ [TeacherPanel] SPEECH ERROR:', e.error);
+          if (e.error !== 'interrupted' && e.error !== 'canceled') {
+            toast({
+              title: "Speech Error",
+              description: `Failed to speak: ${e.error}`,
+              variant: "destructive",
+            });
+          }
+        };
+        
+        console.log('🚀 [TeacherPanel] CALLING speechSynthesis.speak()');
+        speechSynthesis.speak(utterance);
+        
+        // Chrome fix - sometimes needs a retry
+        setTimeout(() => {
+          if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+            console.log('🔄 Retrying speech...');
+            speechSynthesis.speak(utterance);
+          }
+        }, 100);
+      };
+
+      // Load voices if not loaded yet
+      if (speechSynthesis.getVoices().length === 0) {
+        console.log('⏳ Waiting for voices to load...');
+        speechSynthesis.onvoiceschanged = () => {
+          console.log('✅ Voices loaded');
+          speak();
+        };
+      } else {
+        speak();
+      }
+
+    } catch (error) {
+      console.error('💥 [TeacherPanel] Speech failed:', error);
+      toast({
+        title: "Speech Failed",
+        description: "Could not play text-to-speech",
+        variant: "destructive",
+      });
     }
   };
 

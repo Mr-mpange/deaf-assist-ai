@@ -24,6 +24,7 @@ interface RaiseHandPanelProps {
   isCalledOn: boolean;
   onAnswerSubmitted: (sign: string, confidence: number) => void;
   onLowerHand: () => void;
+  liveStream?: MediaStream | null; // Use existing live camera stream
 }
 
 export function RaiseHandPanel({
@@ -33,8 +34,8 @@ export function RaiseHandPanel({
   isCalledOn,
   onAnswerSubmitted,
   onLowerHand,
+  liveStream,
 }: RaiseHandPanelProps) {
-  const [isCameraOn, setIsCameraOn] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [prediction, setPrediction] = useState<SignPrediction | null>(null);
   const [hasRaisedHand, setHasRaisedHand] = useState(false);
@@ -42,76 +43,55 @@ export function RaiseHandPanel({
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
   const { toast } = useToast();
   const { isLoading: isModelLoading, results, detectHands, drawLandmarks } = useHandDetection(videoRef);
 
-  const startCamera = async () => {
-    try {
-      console.log('🎥 Starting camera for student answer...');
+  // Use the live stream from the video call
+  useEffect(() => {
+    if (liveStream && videoRef.current && isCalledOn) {
+      console.log('🎥 [RaiseHand] Using live stream for sign detection');
+      console.log('🎥 [RaiseHand] Stream tracks:', liveStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
       
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: 'user', 
-          width: { ideal: 640, max: 1280 }, 
-          height: { ideal: 480, max: 720 } 
-        },
-        audio: false // Only need video for sign detection
-      });
+      const video = videoRef.current;
+      video.srcObject = liveStream;
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        setIsCameraOn(true);
-        
-        console.log('✅ Camera started successfully for student');
-        
-        toast({
-          title: "Camera Ready",
-          description: "You can now show your sign language answer",
+      // Wait for video metadata to load
+      video.onloadedmetadata = () => {
+        console.log('✅ [RaiseHand] Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
+        video.play().catch(err => {
+          console.error('❌ [RaiseHand] Video play failed:', err);
         });
-      }
-    } catch (err: any) {
-      console.error('❌ Camera failed for student:', err);
+      };
       
-      let errorMessage = "Could not access camera";
-      if (err.name === 'NotAllowedError') {
-        errorMessage = "Camera permission denied. Please allow camera access.";
-      } else if (err.name === 'NotFoundError') {
-        errorMessage = "No camera found. Please connect a camera.";
-      } else if (err.name === 'NotReadableError') {
-        errorMessage = "Camera is being used by another application.";
-      }
-      
-      toast({
-        title: "Camera Error",
-        description: errorMessage,
-        variant: "destructive",
+      // Fallback: try to play immediately
+      video.play().catch(err => {
+        console.log('⏳ [RaiseHand] Waiting for metadata before playing...');
       });
     }
-  };
+  }, [liveStream, isCalledOn]);
 
-  const stopCamera = () => {
+  const stopDetection = () => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setIsCameraOn(false);
     setIsDetecting(false);
   };
 
   const startDetection = useCallback(() => {
-    if (!isCameraOn || isModelLoading) return;
+    if (!liveStream || isModelLoading) {
+      console.log('⚠️ [RaiseHand] Cannot start detection:', { hasStream: !!liveStream, isModelLoading });
+      return;
+    }
     
+    if (!videoRef.current) {
+      console.log('⚠️ [RaiseHand] Video element not ready');
+      return;
+    }
+    
+    console.log('✅ [RaiseHand] Starting detection loop');
     setIsDetecting(true);
     
     const detect = async () => {
@@ -120,7 +100,7 @@ export function RaiseHandPanel({
     };
     
     detect();
-  }, [isCameraOn, isModelLoading, detectHands]);
+  }, [liveStream, isModelLoading, detectHands]);
 
   useEffect(() => {
     if (!results?.landmarks || !canvasRef.current) return;
@@ -128,6 +108,7 @@ export function RaiseHandPanel({
     drawLandmarks(canvasRef.current, results.landmarks);
     const classified = classifySign(results.landmarks);
     if (classified && classified.sign !== 'DETECTING...') {
+      console.log('🤚 [RaiseHand] Sign detected:', classified.sign, 'confidence:', classified.confidence);
       setPrediction(classified);
     }
   }, [results, drawLandmarks]);
@@ -168,7 +149,7 @@ export function RaiseHandPanel({
         .eq('student_id', studentId);
       
       setHasRaisedHand(false);
-      stopCamera();
+      stopDetection();
       onLowerHand();
     } catch (err) {
       console.error('Error lowering hand:', err);
@@ -207,7 +188,7 @@ export function RaiseHandPanel({
         description: `Your answer: ${prediction.sign}`,
       });
       
-      stopCamera();
+      stopDetection();
     } catch (err) {
       toast({
         title: "Error",
@@ -219,25 +200,26 @@ export function RaiseHandPanel({
     }
   };
 
-  // Auto-start camera when called on
+  // Auto-start detection when called on and live stream is available
   useEffect(() => {
-    if (isCalledOn && !isCameraOn) {
-      console.log('🎥 Student called on - auto-starting camera');
-      startCamera();
+    if (isCalledOn && liveStream && !isModelLoading && !isDetecting) {
+      console.log('🎥 [RaiseHand] Student called on - starting sign detection');
+      console.log('🎥 [RaiseHand] isModelLoading:', isModelLoading);
+      console.log('🎥 [RaiseHand] isDetecting:', isDetecting);
+      console.log('🎥 [RaiseHand] liveStream:', !!liveStream);
+      console.log('🎥 [RaiseHand] videoRef.current:', !!videoRef.current);
       
-      toast({
-        title: "You've been called on!",
-        description: "Camera starting automatically for your answer",
-      });
+      // Small delay to ensure video element is ready
+      setTimeout(() => {
+        startDetection();
+        
+        toast({
+          title: "You've been called on!",
+          description: "Show your sign language answer to the camera",
+        });
+      }, 500);
     }
-  }, [isCalledOn, toast]);
-
-  // Auto-start detection when camera is ready and called on
-  useEffect(() => {
-    if (isCalledOn && isCameraOn && !isModelLoading && !isDetecting) {
-      startDetection();
-    }
-  }, [isCalledOn, isCameraOn, isModelLoading, isDetecting, startDetection]);
+  }, [isCalledOn, liveStream, isModelLoading, isDetecting, startDetection, toast]);
 
   return (
     <Card className={cn(
@@ -265,27 +247,35 @@ export function RaiseHandPanel({
       <CardContent className="space-y-4">
         {isCalledOn ? (
           <>
-            {/* Camera view for answering */}
+            {/* Camera view for answering - using live stream */}
             <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-              {isCameraOn ? (
+              {liveStream ? (
                 <>
                   <video
                     ref={videoRef}
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover bg-black"
                   />
                   <canvas
                     ref={canvasRef}
-                    width={320}
-                    height={240}
+                    width={640}
+                    height={480}
                     className="absolute inset-0 w-full h-full pointer-events-none"
                   />
+                  {isDetecting && (
+                    <div className="absolute top-2 left-2">
+                      <Badge variant="default" className="bg-green-600 animate-pulse">
+                        Detecting Signs...
+                      </Badge>
+                    </div>
+                  )}
                 </>
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <CameraOff className="w-8 h-8 text-muted-foreground" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <CameraOff className="w-8 h-8 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">Waiting for camera...</p>
                 </div>
               )}
 

@@ -40,6 +40,29 @@ export function TeacherRaisedHandsPanel({
   const [currentlyCalledId, setCurrentlyCalledId] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Play notification sound
+  const playNotificationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (error) {
+      console.log('Could not play notification sound:', error);
+    }
+  };
+
   useEffect(() => {
     fetchRaisedHands();
 
@@ -49,13 +72,62 @@ export function TeacherRaisedHandsPanel({
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'raised_hands',
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          console.log('Raised hand update:', payload);
+          console.log('New raised hand:', payload);
+          const newHand = payload.new as RaisedHand;
+          
+          // Show notification
+          toast({
+            title: "🙋 Student Raised Hand!",
+            description: `${newHand.student_name} wants to answer`,
+            duration: 5000,
+          });
+          
+          // Play sound
+          playNotificationSound();
+          
+          fetchRaisedHands();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'raised_hands',
+          filter: `session_id=eq.${sessionId}`,
+        },
+        (payload) => {
+          console.log('Raised hand updated:', payload);
+          const updatedHand = payload.new as RaisedHand;
+          
+          // Notify when student answers
+          if (updatedHand.status === 'answered' && updatedHand.answer_sign) {
+            toast({
+              title: "✅ Student Answered!",
+              description: `${updatedHand.student_name} signed: ${updatedHand.answer_sign}`,
+              duration: 5000,
+            });
+            playNotificationSound();
+          }
+          
+          fetchRaisedHands();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'raised_hands',
+          filter: `session_id=eq.${sessionId}`,
+        },
+        () => {
           fetchRaisedHands();
         }
       )
@@ -64,7 +136,7 @@ export function TeacherRaisedHandsPanel({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sessionId]);
+  }, [sessionId, toast]);
 
   const fetchRaisedHands = async () => {
     const { data, error } = await supabase
@@ -201,10 +273,16 @@ export function TeacherRaisedHandsPanel({
                         Call On
                       </Button>
                     )}
+                    {hand.status === 'called' && (
+                      <div className="flex-1 text-sm text-muted-foreground italic">
+                        Waiting for student to answer...
+                      </div>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleDismiss(hand)}
+                      title="Dismiss"
                     >
                       <XCircle className="w-4 h-4" />
                     </Button>

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { X, Crown, Mic, MicOff, VideoOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 interface FullscreenVideoModalProps {
   isOpen: boolean;
@@ -70,6 +71,14 @@ export function FullscreenVideoModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-none w-screen h-screen p-0 bg-black/95">
+        <VisuallyHidden>
+          <DialogTitle>
+            {isScreenShare ? 'Screen Share' : `${name}${isLocal ? ' (You)' : ''}`}
+          </DialogTitle>
+          <DialogDescription>
+            Fullscreen video view. Press ESC or click to close.
+          </DialogDescription>
+        </VisuallyHidden>
         <div 
           className="relative w-full h-full flex items-center justify-center cursor-pointer" 
           onClick={onClose}

@@ -256,18 +256,37 @@ function TeacherDashboard() {
         .order('created_at', { ascending: false });
 
       // Fetch pending submissions for teacher's lessons
-      const { data: submissionsData } = await supabase
-        .from('submissions')
-        .select(`
-          id,
-          status,
-          created_at,
-          profiles!submissions_student_id_fkey(name),
-          lessons!submissions_lesson_id_fkey(title)
-        `)
-        .eq('status', 'pending')
-        .in('lesson_id', lessonsData?.map(l => l.id) || [])
-        .order('created_at', { ascending: false });
+      const lessonIds = lessonsData?.map(l => l.id) || [];
+      
+      let submissionsData: any[] = [];
+      if (lessonIds.length > 0 && Array.isArray(lessonIds)) {
+        const { data } = await supabase
+          .from('submissions')
+          .select('id, status, created_at, student_id, lesson_id')
+          .eq('status', 'pending')
+          .in('lesson_id', lessonIds)
+          .order('created_at', { ascending: false });
+        
+        submissionsData = data || [];
+        
+        // Fetch student names and lesson titles separately
+        for (const sub of submissionsData) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', sub.student_id)
+            .single();
+          
+          const { data: lesson } = await supabase
+            .from('lessons')
+            .select('title')
+            .eq('id', sub.lesson_id)
+            .single();
+          
+          (sub as any).profiles = profile;
+          (sub as any).lessons = lesson;
+        }
+      }
 
       // Fetch teacher's live sessions count (this month)
       const startOfMonth = new Date();

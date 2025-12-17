@@ -92,22 +92,30 @@ export default function TeacherSubmissions() {
       // Fetch submissions with student and lesson information
       const { data: submissionsData, error } = await supabase
         .from('submissions')
-        .select(`
-          id,
-          student_id,
-          lesson_id,
-          video_url,
-          status,
-          feedback,
-          rating,
-          created_at,
-          updated_at,
-          profiles!submissions_student_id_fkey(name),
-          lessons!submissions_lesson_id_fkey(title)
-        `)
+        .select('id, student_id, lesson_id, video_url, status, feedback, rating, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      // Fetch student names and lesson titles separately to avoid foreign key issues
+      if (submissionsData) {
+        for (const sub of submissionsData) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', sub.student_id)
+            .maybeSingle();
+          
+          const { data: lesson } = await supabase
+            .from('lessons')
+            .select('title')
+            .eq('id', sub.lesson_id)
+            .maybeSingle();
+          
+          (sub as any).profiles = profile;
+          (sub as any).lessons = lesson;
+        }
+      }
 
       // Transform the data to match our interface
       const transformedSubmissions: Submission[] = submissionsData?.map(sub => ({

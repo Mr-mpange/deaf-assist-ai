@@ -377,7 +377,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     console.log('🔍 Adding participant:', participantData);
     console.log('🔍 Participant name from DB:', participantData.name);
     console.log('🔍 Current user ID:', userId);
-    console.log('🔍 Local stream available:', !!localStream);
+    console.log('🔍 Local stream available:', !!localStreamRef.current);
     
     const newParticipant: Participant = {
       id: participantData.user_id,
@@ -387,7 +387,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       isVideoOff: participantData.is_video_off || false,
       joinedAt: participantData.joined_at,
       // Local stream for current user, remote stream will be added via WebRTC
-      stream: participantData.user_id === userId ? localStream || undefined : undefined,
+      stream: participantData.user_id === userId ? localStreamRef.current || undefined : undefined,
     };
     
     console.log('Created participant:', newParticipant);
@@ -409,7 +409,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         description: `${participantData.name} has joined the session`,
       });
     }
-  }, [userId, localStream, toast]);
+  }, [userId, toast]);
 
   const removeParticipant = useCallback((participantId: string, participantName: string) => {
     // Close peer connection
@@ -506,7 +506,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
           )
           .subscribe();
 
-        // Add participant to database
+        // Add participant to database (with conflict handling)
         const { error } = await supabase
           .from('session_participants')
           .upsert({
@@ -517,12 +517,25 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
             is_muted: false,
             is_video_off: false,
             joined_at: new Date().toISOString(),
+          }, {
+            onConflict: 'session_id,user_id',
+            ignoreDuplicates: false
           });
 
         if (error) {
-          console.error('Error adding participant:', error);
-          useDatabase = false;
-        } else {
+          // Ignore duplicate key errors (23505)
+          if (error.code !== '23505') {
+            console.error('Error adding participant:', error);
+          }
+          // Don't set useDatabase to false for duplicate errors
+          if (error.code === '23505') {
+            console.log('Participant already exists, continuing...');
+          } else {
+            useDatabase = false;
+          }
+        }
+        
+        if (!error || error.code === '23505') {
           // Fetch existing participants
           const { data: existingParticipants } = await supabase
             .from('session_participants')
