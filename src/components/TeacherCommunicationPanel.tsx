@@ -184,7 +184,7 @@ export function TeacherCommunicationPanel({
     setIsWaitingForResponses(false);
   };
 
-  const speakMessage = (text: string) => {
+  const speakMessage = async (text: string) => {
     if (!text.trim()) {
       console.log('🔇 No text to speak');
       toast({
@@ -208,8 +208,12 @@ export function TeacherCommunicationPanel({
     }
 
     try {
-      // Stop any current speech
-      speechSynthesis.cancel();
+      // Stop any current speech and wait a bit
+      if (speechSynthesis.speaking || speechSynthesis.pending) {
+        speechSynthesis.cancel();
+        // Wait for cancellation to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       
       // Wait for voices to load
       const speak = () => {
@@ -255,14 +259,6 @@ export function TeacherCommunicationPanel({
         
         console.log('🚀 [TeacherPanel] CALLING speechSynthesis.speak()');
         speechSynthesis.speak(utterance);
-        
-        // Chrome fix - sometimes needs a retry
-        setTimeout(() => {
-          if (!speechSynthesis.speaking && !speechSynthesis.pending) {
-            console.log('🔄 Retrying speech...');
-            speechSynthesis.speak(utterance);
-          }
-        }, 100);
       };
 
       // Load voices if not loaded yet

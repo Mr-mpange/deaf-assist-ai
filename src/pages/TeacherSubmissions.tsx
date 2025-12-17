@@ -51,8 +51,8 @@ interface Submission {
   video_url: string | null;
   status: 'pending' | 'reviewed' | 'approved';
   feedback: string | null;
-  created_at: string;
-  updated_at: string;
+  submitted_at: string;
+  reviewed_at: string | null;
   // Joined data
   student_name: string;
   lesson_title: string;
@@ -90,8 +90,8 @@ export default function TeacherSubmissions() {
       // Fetch submissions with student and lesson information
       const { data: submissionsData, error } = await supabase
         .from('submissions')
-        .select('id, student_id, lesson_id, video_url, status, feedback, created_at, updated_at')
-        .order('created_at', { ascending: false });
+        .select('id, student_id, lesson_id, video_url, status, feedback, submitted_at, reviewed_at')
+        .order('submitted_at', { ascending: false });
 
       if (error) throw error;
       
@@ -123,8 +123,8 @@ export default function TeacherSubmissions() {
         video_url: sub.video_url,
         status: sub.status as 'pending' | 'reviewed' | 'approved',
         feedback: sub.feedback,
-        created_at: sub.created_at,
-        updated_at: sub.updated_at,
+        submitted_at: sub.submitted_at,
+        reviewed_at: sub.reviewed_at,
         student_name: (sub.profiles as any)?.name || 'Unknown Student',
         lesson_title: (sub.lessons as any)?.title || 'Unknown Lesson'
       })) || [];
@@ -175,7 +175,7 @@ export default function TeacherSubmissions() {
         .update({
           status: 'reviewed',
           feedback: feedback.trim(),
-          updated_at: new Date().toISOString()
+          reviewed_at: new Date().toISOString()
         })
         .eq('id', selectedSubmission.id);
 
@@ -188,7 +188,7 @@ export default function TeacherSubmissions() {
               ...sub, 
               status: 'reviewed' as const,
               feedback: feedback.trim(),
-              updated_at: new Date().toISOString()
+              reviewed_at: new Date().toISOString()
             }
           : sub
       );
@@ -222,7 +222,7 @@ export default function TeacherSubmissions() {
         .from('submissions')
         .update({
           status: 'approved',
-          updated_at: new Date().toISOString()
+          reviewed_at: new Date().toISOString()
         })
         .eq('id', submission.id);
 
@@ -231,7 +231,7 @@ export default function TeacherSubmissions() {
       // Update local state
       const updatedSubmissions = submissions.map(sub => 
         sub.id === submission.id 
-          ? { ...sub, status: 'approved' as const, updated_at: new Date().toISOString() }
+          ? { ...sub, status: 'approved' as const, reviewed_at: new Date().toISOString() }
           : sub
       );
       
@@ -439,7 +439,7 @@ export default function TeacherSubmissions() {
                     )}
 
                     <p className="text-xs text-muted-foreground">
-                      Submitted {new Date(submission.created_at).toLocaleDateString()}
+                      Submitted {new Date(submission.submitted_at).toLocaleDateString()}
                     </p>
 
                     {submission.feedback && (
