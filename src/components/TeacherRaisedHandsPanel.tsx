@@ -25,6 +25,9 @@ interface RaisedHand {
   called_at: string | null;
   answer_sign: string | null;
   answer_confidence: number | null;
+  current_sign: string | null;
+  current_confidence: number | null;
+  last_detected_at: string | null;
 }
 
 interface TeacherRaisedHandsPanelProps {
@@ -249,6 +252,25 @@ export function TeacherRaisedHandsPanel({
                     </Badge>
                   </div>
 
+                  {/* Real-time sign detection (when called on) */}
+                  {hand.status === 'called' && hand.current_sign && (
+                    <div className="mb-3 p-2 bg-blue-500/10 rounded-md border border-blue-500/20">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-blue-500 animate-pulse" />
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                          {hand.current_sign}
+                        </span>
+                        <Badge variant="outline" className="ml-auto text-xs border-blue-500/30">
+                          {Math.round((hand.current_confidence || 0) * 100)}%
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Live detection • Waiting for submit
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Final answer (when answered) */}
                   {hand.status === 'answered' && hand.answer_sign && (
                     <div className="mb-3 p-2 bg-success/10 rounded-md">
                       <div className="flex items-center gap-2">
@@ -258,6 +280,9 @@ export function TeacherRaisedHandsPanel({
                           {Math.round((hand.answer_confidence || 0) * 100)}% confidence
                         </Badge>
                       </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Final answer
+                      </p>
                     </div>
                   )}
 

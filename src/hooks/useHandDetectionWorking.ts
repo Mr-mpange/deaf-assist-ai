@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
+import { getMediaPipeInstance } from '@/lib/mediapipe-singleton';
 
 export interface HandLandmark {
   x: number;
@@ -11,82 +12,65 @@ export interface HandResults {
   handedness: { label: string; score: number }[] | null;
 }
 
-// Working MediaPipe approach using dynamic script loading
+// Working MediaPipe approach using singleton instance
 export function useHandDetectionWorking(videoRef: React.RefObject<HTMLVideoElement>) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<HandResults | null>(null);
   const handsRef = useRef<any>(null);
-
-  const loadMediaPipeScript = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      // Check if MediaPipe is already loaded
-      if ((window as any).Hands) {
-        resolve((window as any).Hands);
-        return;
-      }
-
-      // Load MediaPipe script dynamically
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
-      script.onload = () => {
-        if ((window as any).Hands) {
-          resolve((window as any).Hands);
-        } else {
-          reject(new Error('MediaPipe Hands not found after script load'));
-        }
-      };
-      script.onerror = () => reject(new Error('Failed to load MediaPipe script'));
-      document.head.appendChild(script);
-    });
-  }, []);
+  const callbackIdRef = useRef<string | null>(null);
 
   const initializeHands = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      console.log('🚀 Loading MediaPipe via script tag...');
+      console.log('🚀 [useHandDetection] Getting MediaPipe instance...');
 
-      const Hands = await loadMediaPipeScript();
-      console.log('✅ MediaPipe script loaded successfully');
+      const hands = await getMediaPipeInstance();
+      handsRef.current = hands;
 
-      const hands = new (Hands as any)({
-        locateFile: (file: string) => {
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        },
-      });
+      // Create unique callback ID for this component
+      const callbackId = `callback_${Date.now()}_${Math.random()}`;
+      callbackIdRef.current = callbackId;
 
-      hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.5,
-      });
+      // Store callbacks in a map on the hands instance
+      if (!hands._callbacks) {
+        hands._callbacks = new Map();
+        
+        // Set up the main onResults handler once
+        hands.onResults((handResults: any) => {
+          // Call all registered callbacks
+          hands._callbacks.forEach((callback: Function) => {
+            callback(handResults);
+          });
+        });
+      }
 
-      hands.onResults((handResults: any) => {
+      // Register this component's callback
+      hands._callbacks.set(callbackId, (handResults: any) => {
         setResults({
           landmarks: handResults.multiHandLandmarks || null,
           handedness: handResults.multiHandedness || null,
         });
       });
 
-      await hands.initialize();
-      handsRef.current = hands;
       setIsLoading(false);
-      console.log('🎉 MediaPipe initialized successfully!');
+      console.log('✅ [useHandDetection] MediaPipe ready!');
     } catch (err) {
-      console.error('💥 MediaPipe initialization failed:', err);
+      console.error('💥 [useHandDetection] MediaPipe initialization failed:', err);
       setError(`MediaPipe failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setIsLoading(false);
     }
-  }, [loadMediaPipeScript]);
+  }, []);
 
   useEffect(() => {
     initializeHands();
     
     return () => {
-      if (handsRef.current) {
-        handsRef.current.close();
+      // Unregister callback on unmount
+      if (handsRef.current && callbackIdRef.current) {
+        handsRef.current._callbacks?.delete(callbackIdRef.current);
+        console.log('🧹 [useHandDetection] Callback unregistered');
       }
     };
   }, [initializeHands]);

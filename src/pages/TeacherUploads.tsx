@@ -49,7 +49,6 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { EnhancedVideoPlayer } from '@/components/EnhancedVideoPlayer';
-import { RecordingDiagnostic } from '@/components/RecordingDiagnostic';
 import { Navigate } from 'react-router-dom';
 
 export default function TeacherUploads() {
@@ -690,9 +689,6 @@ export default function TeacherUploads() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-
-        {/* Video Diagnostics */}
-        <RecordingDiagnostic />
 
         {/* Video Preview Dialog */}
         <Dialog open={!!previewLesson} onOpenChange={() => setPreviewLesson(null)}>

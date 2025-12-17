@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -84,7 +84,13 @@ export default function LiveSessions() {
   const isTeacher = role === 'teacher' || role === 'admin';
   const isHost = activeSession?.host_id === user?.id;
 
-  // Host status tracking for active session
+  // Memoize WebRTC config to prevent re-initialization
+  const webRTCConfig = useMemo(() => ({
+    roomId: activeSession?.id || '',
+    userId: user?.id || '',
+    userName: profile?.name || user?.email?.split('@')[0] || user?.id?.slice(0, 8) || 'Anonymous',
+    isHost: isHost,
+  }), [activeSession?.id, user?.id, profile?.name, user?.email, isHost]);
 
   const {
     participants,
@@ -101,12 +107,7 @@ export default function LiveSessions() {
     startScreenShare,
     stopScreenShare,
     retryCamera,
-  } = useWebRTC({
-    roomId: activeSession?.id || '',
-    userId: user?.id || '',
-    userName: profile?.name || user?.email?.split('@')[0] || user?.id?.slice(0, 8) || 'Anonymous',
-    isHost: isHost,
-  });
+  } = useWebRTC(webRTCConfig);
 
   const {
     isRecording,
@@ -336,7 +337,8 @@ export default function LiveSessions() {
       
       return () => clearTimeout(timer);
     }
-  }, [activeSession, isConnected, isHost, startCall, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.id, isConnected]);
 
   const handleEndSession = async () => {
     // Stop recording first

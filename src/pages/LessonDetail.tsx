@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { 
   ArrowLeft, 
   Clock, 
@@ -14,9 +16,11 @@ import {
   BookOpen,
   Camera,
   Share2,
-  Heart
+  Heart,
+  CheckCircle2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 interface Lesson {
   id: string;
@@ -34,9 +38,15 @@ interface Lesson {
 
 export default function LessonDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [relatedLessons, setRelatedLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const progressUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -66,11 +76,81 @@ export default function LessonDetail() {
         
         setRelatedLessons(related || []);
       }
+
+      // Fetch user's progress for this lesson
+      if (user) {
+        const { data: progressData } = await supabase
+          .from('lesson_progress')
+          .select('progress_percentage, completed')
+          .eq('user_id', user.id)
+          .eq('lesson_id', lessonId)
+          .maybeSingle();
+
+        if (progressData) {
+          setProgress(progressData.progress_percentage || 0);
+          setIsCompleted(progressData.completed || false);
+        }
+      }
     } catch (error) {
       console.error('Error fetching lesson:', error);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const updateProgress = async (progressPercentage: number) => {
+    if (!user || !id) return;
+
+    try {
+      const completed = progressPercentage >= 90;
+
+      await supabase
+        .from('lesson_progress')
+        .upsert({
+          user_id: user.id,
+          lesson_id: id,
+          progress_percentage: progressPercentage,
+          completed: completed,
+          last_accessed_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,lesson_id'
+        });
+
+      setProgress(progressPercentage);
+      setIsCompleted(completed);
+
+      if (completed && !isCompleted) {
+        toast({
+          title: "Lesson Completed!",
+          description: "Great job! You've finished this lesson.",
+        });
+      }
+    } catch (error) {
+      console.error('Error updating progress:', error);
+    }
+  };
+
+  const handleVideoTimeUpdate = () => {
+    if (!videoRef.current) return;
+
+    const video = videoRef.current;
+    const progressPercentage = (video.currentTime / video.duration) * 100;
+
+    // Update progress in state immediately
+    setProgress(Math.round(progressPercentage));
+
+    // Debounce database updates (every 5 seconds)
+    if (progressUpdateTimeoutRef.current) {
+      clearTimeout(progressUpdateTimeoutRef.current);
+    }
+
+    progressUpdateTimeoutRef.current = setTimeout(() => {
+      updateProgress(Math.round(progressPercentage));
+    }, 5000);
+  };
+
+  const handleVideoEnded = () => {
+    updateProgress(100);
   };
 
   if (isLoading) {
@@ -124,23 +204,43 @@ export default function LessonDetail() {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Video Player */}
-            <div className="relative aspect-video rounded-2xl overflow-hidden bg-foreground/5 shadow-lg">
-              {lesson.thumbnail_url ? (
-                <img
-                  src={lesson.thumbnail_url}
-                  alt={lesson.title}
-                  className="w-full h-full object-cover"
-                />
+            <div className="relative aspect-video rounded-2xl overflow-hidden bg-black shadow-lg">
+              {lesson.video_url ? (
+                <video
+                  ref={videoRef}
+                  controls
+                  className="w-full h-full"
+                  poster={lesson.thumbnail_url}
+                  preload="metadata"
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  onEnded={handleVideoEnded}
+                >
+                  <source src={lesson.video_url} type="video/mp4" />
+                  <source src={lesson.video_url} type="video/webm" />
+                  Your browser does not support the video tag.
+                </video>
+              ) : lesson.thumbnail_url ? (
+                <>
+                  <img
+                    src={lesson.thumbnail_url}
+                    alt={lesson.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <div className="text-center text-white">
+                      <Play className="w-16 h-16 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">Video not available</p>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <div className="w-full h-full bg-muted flex items-center justify-center">
-                  <BookOpen className="w-16 h-16 text-muted-foreground/50" />
+                  <div className="text-center">
+                    <BookOpen className="w-16 h-16 text-muted-foreground/50 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No video available</p>
+                  </div>
                 </div>
               )}
-              <div className="absolute inset-0 flex items-center justify-center bg-foreground/20">
-                <button className="w-20 h-20 rounded-full bg-primary/90 flex items-center justify-center shadow-glow hover:scale-105 transition-transform">
-                  <Play className="w-8 h-8 text-primary-foreground ml-1" />
-                </button>
-              </div>
             </div>
 
             {/* Lesson Info */}
@@ -205,15 +305,24 @@ export default function LessonDetail() {
                   <div>
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-muted-foreground">Completion</span>
-                      <span className="font-medium">0%</span>
+                      <span className="font-medium">{Math.round(progress)}%</span>
                     </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full w-0 bg-gradient-primary rounded-full" />
-                    </div>
+                    <Progress value={progress} className="h-2" />
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Start watching to track your progress
-                  </p>
+                  {isCompleted ? (
+                    <div className="flex items-center gap-2 text-success">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <p className="text-sm font-medium">Lesson completed!</p>
+                    </div>
+                  ) : progress > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Keep watching to complete this lesson
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Start watching to track your progress
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

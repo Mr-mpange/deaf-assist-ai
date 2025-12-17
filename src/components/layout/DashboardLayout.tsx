@@ -4,8 +4,6 @@ import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
 import { Navigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -33,42 +31,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      
-      {/* Sidebar Toggle Button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "fixed top-4 z-50 transition-all duration-300",
-          collapsed ? "left-[72px]" : "left-[248px]",
-          "lg:flex hidden" // Show on desktop, hide on mobile
-        )}
-        onClick={toggleCollapsed}
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed ? (
-          <ChevronRight className="w-5 h-5" />
-        ) : (
-          <ChevronLeft className="w-5 h-5" />
-        )}
-      </Button>
-      
-      {/* Mobile Menu Button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "fixed top-4 left-4 z-50 lg:hidden",
-          !collapsed && "left-[272px]" // Move button when sidebar is open
-        )}
-        onClick={toggleCollapsed}
-      >
-        {collapsed ? (
-          <ChevronRight className="w-5 h-5" />
-        ) : (
-          <ChevronLeft className="w-5 h-5" />
-        )}
-      </Button>
       
       <main className={cn(
         "min-h-screen transition-all duration-300",

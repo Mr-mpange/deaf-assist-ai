@@ -51,7 +51,6 @@ interface Submission {
   video_url: string | null;
   status: 'pending' | 'reviewed' | 'approved';
   feedback: string | null;
-  rating: number | null;
   created_at: string;
   updated_at: string;
   // Joined data
@@ -68,7 +67,6 @@ export default function TeacherSubmissions() {
   const { toast } = useToast();
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [feedback, setFeedback] = useState('');
-  const [rating, setRating] = useState<number>(0);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,7 +90,7 @@ export default function TeacherSubmissions() {
       // Fetch submissions with student and lesson information
       const { data: submissionsData, error } = await supabase
         .from('submissions')
-        .select('id, student_id, lesson_id, video_url, status, feedback, rating, created_at, updated_at')
+        .select('id, student_id, lesson_id, video_url, status, feedback, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -125,7 +123,6 @@ export default function TeacherSubmissions() {
         video_url: sub.video_url,
         status: sub.status as 'pending' | 'reviewed' | 'approved',
         feedback: sub.feedback,
-        rating: sub.rating,
         created_at: sub.created_at,
         updated_at: sub.updated_at,
         student_name: (sub.profiles as any)?.name || 'Unknown Student',
@@ -178,7 +175,6 @@ export default function TeacherSubmissions() {
         .update({
           status: 'reviewed',
           feedback: feedback.trim(),
-          rating: rating || null,
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedSubmission.id);
@@ -192,7 +188,6 @@ export default function TeacherSubmissions() {
               ...sub, 
               status: 'reviewed' as const,
               feedback: feedback.trim(),
-              rating,
               updated_at: new Date().toISOString()
             }
           : sub
@@ -208,7 +203,6 @@ export default function TeacherSubmissions() {
       
       setSelectedSubmission(null);
       setFeedback('');
-      setRating(0);
     } catch (error) {
       console.error('Error submitting review:', error);
       toast({
@@ -461,21 +455,6 @@ export default function TeacherSubmissions() {
                           </Button>
                         </div>
                         <p className="text-muted-foreground">{submission.feedback}</p>
-                        {submission.rating && (
-                          <div className="flex items-center gap-1 mt-2">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <Star
-                                key={star}
-                                className={cn(
-                                  "w-3 h-3",
-                                  star <= submission.rating! 
-                                    ? "fill-yellow-400 text-yellow-400" 
-                                    : "text-muted-foreground"
-                                )}
-                              />
-                            ))}
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -583,37 +562,6 @@ export default function TeacherSubmissions() {
                   </CardContent>
                 </Card>
               )}
-
-              {/* Rating */}
-              <div className="space-y-2">
-                <Label className="font-medium">Rating</Label>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Button
-                      key={star}
-                      variant="ghost"
-                      size="sm"
-                      className="p-1 h-auto"
-                      onClick={() => setRating(star)}
-                    >
-                      <Star
-                        className={cn(
-                          "w-6 h-6 transition-colors",
-                          star <= rating 
-                            ? "fill-yellow-400 text-yellow-400" 
-                            : "text-muted-foreground hover:text-yellow-400"
-                        )}
-                      />
-                    </Button>
-                  ))}
-                  {rating > 0 && (
-                    <span className="ml-2 text-sm text-muted-foreground">
-                      {rating} star{rating !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-              </div>
-
               {/* Feedback */}
               <div className="space-y-2">
                 <Label className="font-medium">Your Feedback</Label>
@@ -635,7 +583,6 @@ export default function TeacherSubmissions() {
                   onClick={() => {
                     setSelectedSubmission(null);
                     setFeedback('');
-                    setRating(0);
                   }}
                   disabled={isReviewing}
                 >
