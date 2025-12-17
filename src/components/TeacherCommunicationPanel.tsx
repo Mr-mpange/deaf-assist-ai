@@ -51,6 +51,7 @@ export function TeacherCommunicationPanel({
   const [currentMessage, setCurrentMessage] = useState('');
   const [isWaitingForResponses, setIsWaitingForResponses] = useState(false);
   const [showSignPreview, setShowSignPreview] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const { toast } = useToast();
 
 
@@ -186,7 +187,6 @@ export function TeacherCommunicationPanel({
 
   const speakMessage = async (text: string) => {
     if (!text.trim()) {
-      console.log('🔇 No text to speak');
       toast({
         title: "No Text",
         description: "Please enter text to speak",
@@ -195,85 +195,130 @@ export function TeacherCommunicationPanel({
       return;
     }
 
+    // Prevent multiple simultaneous speech attempts
+    if (isSpeaking) {
+      console.log('🔇 Already speaking, ignoring request');
+      return;
+    }
+
     console.log('🔊 [TeacherPanel] SPEAKING:', text);
 
     if (!('speechSynthesis' in window)) {
-      console.error('❌ [TeacherPanel] Speech synthesis not supported');
       toast({
         title: "Not Supported",
-        description: "Text-to-speech is not supported in your browser",
+        description: "Text-to-speech is not supported in your browser. Try Chrome or Edge.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      // Stop any current speech and wait a bit
-      if (speechSynthesis.speaking || speechSynthesis.pending) {
-        speechSynthesis.cancel();
-        // Wait for cancellation to complete
-        await new Promise(resolve => setTimeout(resolve, 100));
+      setIsSpeaking(true);
+      
+      // Stop any current speech
+      speechSynthesis.cancel();
+      
+      // Wait a moment for cancellation
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Check if voices are available
+      const voices = speechSynthesis.getVoices();
+      console.log('🎤 Available voices:', voices.length);
+      console.log('🎤 Voice list:', voices.map(v => `${v.name} (${v.lang})`));
+      
+      if (voices.length === 0) {
+        // Try to trigger voice loading
+        speechSynthesis.getVoices();
+        await new Promise(resolve => {
+          if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = () => {
+              console.log('🎤 Voices loaded after wait');
+              resolve(undefined);
+            };
+          } else {
+            setTimeout(resolve, 1000);
+          }
+        });
       }
       
-      // Wait for voices to load
-      const speak = () => {
-        const utterance = new SpeechSynthesisUtterance(text.trim());
-        utterance.rate = 0.85;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        utterance.lang = 'en-US';
+      const utterance = new SpeechSynthesisUtterance(text.trim());
+      utterance.rate = 0.8;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      utterance.lang = 'en-US';
+      
+      // Get voices again after loading
+      const availableVoices = speechSynthesis.getVoices();
+      if (availableVoices.length > 0) {
+        // Try different voice selection strategies
+        let selectedVoice = availableVoices.find(voice => 
+          voice.lang.includes('en-US') && voice.localService
+        ) || availableVoices.find(voice => 
+          voice.lang.includes('en') && voice.localService
+        ) || availableVoices.find(voice => 
+          voice.lang.includes('en-US')
+        ) || availableVoices.find(voice => 
+          voice.lang.includes('en')
+        ) || availableVoices[0];
         
-        // Try to get a good voice
-        const voices = speechSynthesis.getVoices();
-        if (voices.length > 0) {
-          // Prefer English voices
-          const englishVoice = voices.find(voice => 
-            voice.lang.includes('en') && !voice.name.includes('Google')
-          ) || voices.find(voice => voice.lang.includes('en')) || voices[0];
-          utterance.voice = englishVoice;
-          console.log('🎤 Using voice:', englishVoice.name);
-        }
-        
-        utterance.onstart = () => {
-          console.log('🎤 [TeacherPanel] SPEECH STARTED:', text);
-          toast({
-            title: "Speaking",
-            description: "Playing text-to-speech...",
-          });
-        };
-        
-        utterance.onend = () => {
-          console.log('✅ [TeacherPanel] SPEECH ENDED:', text);
-        };
-        
-        utterance.onerror = (e) => {
-          console.error('❌ [TeacherPanel] SPEECH ERROR:', e.error);
-          if (e.error !== 'interrupted' && e.error !== 'canceled') {
-            toast({
-              title: "Speech Error",
-              description: `Failed to speak: ${e.error}`,
-              variant: "destructive",
-            });
-          }
-        };
-        
-        console.log('🚀 [TeacherPanel] CALLING speechSynthesis.speak()');
-        speechSynthesis.speak(utterance);
-      };
-
-      // Load voices if not loaded yet
-      if (speechSynthesis.getVoices().length === 0) {
-        console.log('⏳ Waiting for voices to load...');
-        speechSynthesis.onvoiceschanged = () => {
-          console.log('✅ Voices loaded');
-          speak();
-        };
+        utterance.voice = selectedVoice;
+        console.log('🎤 Selected voice:', selectedVoice.name, selectedVoice.lang, 'Local:', selectedVoice.localService);
       } else {
-        speak();
+        console.log('⚠️ No voices available, using default');
       }
+      
+      // Add timeout to detect if speech actually starts
+      let speechStarted = false;
+      const timeoutId = setTimeout(() => {
+        if (!speechStarted) {
+          console.log('⚠️ Speech timeout - no audio detected');
+          setIsSpeaking(false);
+          toast({
+            title: "Audio Issue",
+            description: "No sound detected. Check system volume and browser audio settings.",
+            variant: "destructive",
+          });
+        }
+      }, 3000);
+      
+      utterance.onstart = () => {
+        speechStarted = true;
+        clearTimeout(timeoutId);
+        console.log('🎤 [TeacherPanel] SPEECH STARTED:', text);
+        toast({
+          title: "Speaking",
+          description: "Playing text-to-speech...",
+        });
+      };
+      
+      utterance.onend = () => {
+        clearTimeout(timeoutId);
+        console.log('✅ [TeacherPanel] SPEECH ENDED:', text);
+        setIsSpeaking(false);
+      };
+      
+      utterance.onerror = (e) => {
+        clearTimeout(timeoutId);
+        console.error('❌ [TeacherPanel] SPEECH ERROR:', e.error);
+        setIsSpeaking(false);
+        if (e.error !== 'interrupted' && e.error !== 'canceled') {
+          toast({
+            title: "Speech Error",
+            description: `Speech failed: ${e.error}. Try Chrome browser or check system audio.`,
+            variant: "destructive",
+          });
+        }
+      };
+      
+      console.log('🚀 [TeacherPanel] CALLING speechSynthesis.speak()');
+      console.log('🔊 System audio check - speechSynthesis.speaking:', speechSynthesis.speaking);
+      console.log('🔊 System audio check - speechSynthesis.pending:', speechSynthesis.pending);
+      
+      speechSynthesis.speak(utterance);
 
     } catch (error) {
       console.error('💥 [TeacherPanel] Speech failed:', error);
+      setIsSpeaking(false);
       toast({
         title: "Speech Failed",
         description: "Could not play text-to-speech",
@@ -330,10 +375,19 @@ export function TeacherCommunicationPanel({
               variant="outline"
               size="sm"
               onClick={() => speakMessage(currentMessage)}
-              disabled={!currentMessage.trim()}
+              disabled={!currentMessage.trim() || isSpeaking}
             >
               <Volume2 className="w-4 h-4 mr-2" />
-              Test Speech
+              {isSpeaking ? 'Speaking...' : 'Test Speech'}
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => speakMessage("Hello, this is a test")}
+              disabled={isSpeaking}
+            >
+              🔊 Quick Test
             </Button>
             
             <Button

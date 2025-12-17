@@ -29,6 +29,21 @@ export function LessonCard({ lesson, className }: LessonCardProps) {
     advanced: 'bg-destructive/10 text-destructive border-destructive/20',
   };
 
+  // Default thumbnails based on category
+  const getDefaultThumbnail = (category: string) => {
+    const defaults = {
+      'alphabet': 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=400&h=225&fit=crop&crop=center',
+      'numbers': 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=400&h=225&fit=crop&crop=center',
+      'phrases': 'https://images.unsplash.com/photo-1573164713714-d95e436ab8d6?w=400&h=225&fit=crop&crop=center',
+      'grammar': 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=400&h=225&fit=crop&crop=center',
+      'advanced': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=225&fit=crop&crop=center',
+      'conversation': 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=400&h=225&fit=crop&crop=center'
+    };
+    return defaults[category.toLowerCase()] || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=400&h=225&fit=crop&crop=center';
+  };
+
+  const thumbnailUrl = lesson.thumbnail_url || getDefaultThumbnail(lesson.category);
+
   return (
     <Card className={cn(
       "group overflow-hidden border-border/50 shadow-card hover:shadow-lg transition-all duration-300 hover:-translate-y-1",
@@ -36,9 +51,15 @@ export function LessonCard({ lesson, className }: LessonCardProps) {
     )}>
       <div className="relative aspect-video overflow-hidden">
         <img
-          src={lesson.thumbnailUrl}
+          src={thumbnailUrl}
           alt={lesson.title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          onError={(e) => {
+            // Fallback to a solid color background if image fails to load
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            target.parentElement!.style.background = 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary)/0.8) 100%)';
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-foreground/80 via-foreground/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         <Link 

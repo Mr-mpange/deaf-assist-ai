@@ -48,6 +48,19 @@ export default function LessonDetail() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Default thumbnails based on category
+  const getDefaultThumbnail = (category: string) => {
+    const defaults = {
+      'alphabet': 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&h=450&fit=crop&crop=center',
+      'numbers': 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=800&h=450&fit=crop&crop=center',
+      'phrases': 'https://images.unsplash.com/photo-1573164713714-d95e436ab8d6?w=800&h=450&fit=crop&crop=center',
+      'grammar': 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=800&h=450&fit=crop&crop=center',
+      'advanced': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=450&fit=crop&crop=center',
+      'conversation': 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800&h=450&fit=crop&crop=center'
+    };
+    return defaults[category.toLowerCase()] || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&h=450&fit=crop&crop=center';
+  };
+
   useEffect(() => {
     if (id) {
       fetchLesson(id);
@@ -210,7 +223,7 @@ export default function LessonDetail() {
                   ref={videoRef}
                   controls
                   className="w-full h-full"
-                  poster={lesson.thumbnail_url}
+                  poster={lesson.thumbnail_url || getDefaultThumbnail(lesson.category)}
                   preload="metadata"
                   onTimeUpdate={handleVideoTimeUpdate}
                   onEnded={handleVideoEnded}
@@ -219,10 +232,10 @@ export default function LessonDetail() {
                   <source src={lesson.video_url} type="video/webm" />
                   Your browser does not support the video tag.
                 </video>
-              ) : lesson.thumbnail_url ? (
+              ) : (
                 <>
                   <img
-                    src={lesson.thumbnail_url}
+                    src={lesson.thumbnail_url || getDefaultThumbnail(lesson.category)}
                     alt={lesson.title}
                     className="w-full h-full object-cover"
                   />
@@ -233,13 +246,6 @@ export default function LessonDetail() {
                     </div>
                   </div>
                 </>
-              ) : (
-                <div className="w-full h-full bg-muted flex items-center justify-center">
-                  <div className="text-center">
-                    <BookOpen className="w-16 h-16 text-muted-foreground/50 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">No video available</p>
-                  </div>
-                </div>
               )}
             </div>
 
