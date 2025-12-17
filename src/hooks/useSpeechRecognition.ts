@@ -14,6 +14,26 @@ interface UseSpeechRecognitionProps {
   language?: string;
 }
 
+// Supported languages for speech recognition
+export const SUPPORTED_LANGUAGES = {
+  'en-US': 'English (US)',
+  'en-GB': 'English (UK)',
+  'sw-KE': 'Swahili (Kenya)',
+  'sw-TZ': 'Swahili (Tanzania)',
+  'sw': 'Swahili',
+  'ar-SA': 'Arabic (Saudi Arabia)',
+  'fr-FR': 'French (France)',
+  'es-ES': 'Spanish (Spain)',
+  'de-DE': 'German (Germany)',
+  'it-IT': 'Italian (Italy)',
+  'pt-BR': 'Portuguese (Brazil)',
+  'ru-RU': 'Russian (Russia)',
+  'zh-CN': 'Chinese (Mandarin)',
+  'ja-JP': 'Japanese',
+  'ko-KR': 'Korean',
+  'hi-IN': 'Hindi (India)',
+};
+
 export function useSpeechRecognition({
   onResult,
   onError,

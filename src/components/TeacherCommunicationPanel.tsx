@@ -15,9 +15,10 @@ import {
   Eye
 } from 'lucide-react';
 import { SignDisplay } from '@/components/SignDisplay';
-import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useSpeechRecognition, SUPPORTED_LANGUAGES } from '@/hooks/useSpeechRecognition';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface TeacherMessage {
   id: string;
@@ -52,6 +53,7 @@ export function TeacherCommunicationPanel({
   const [isWaitingForResponses, setIsWaitingForResponses] = useState(false);
   const [showSignPreview, setShowSignPreview] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('en-US');
   const { toast } = useToast();
 
 
@@ -65,8 +67,11 @@ export function TeacherCommunicationPanel({
     stopListening,
     clearTranscript,
   } = useSpeechRecognition({
+    language: selectedLanguage,
     onResult: (result) => {
+      // Only add final results to avoid duplication
       if (result.isFinal) {
+        console.log('📝 Adding final transcript:', result.transcript);
         setCurrentMessage(prev => prev + result.transcript + ' ');
       }
     },
@@ -340,11 +345,28 @@ export function TeacherCommunicationPanel({
       </CardHeader>
       
       <CardContent className="space-y-4">
+        {/* Language Selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Language:</span>
+          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(SUPPORTED_LANGUAGES).map(([code, name]) => (
+                <SelectItem key={code} value={code}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Input Area */}
         <div className="space-y-3">
           <Textarea
             placeholder="Type your message or use speech-to-text..."
-            value={currentMessage + interimTranscript}
+            value={currentMessage + (isListening ? interimTranscript : '')}
             onChange={(e) => setCurrentMessage(e.target.value)}
             className="min-h-[80px] resize-none"
           />
