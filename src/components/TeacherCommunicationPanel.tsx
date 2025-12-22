@@ -53,7 +53,8 @@ export function TeacherCommunicationPanel({
   const [isWaitingForResponses, setIsWaitingForResponses] = useState(false);
   const [showSignPreview, setShowSignPreview] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('en-US');
+  const [selectedLanguage, setSelectedLanguage] = useState('sw-KE'); // Default to Swahili Kenya
+  const [lastTranscript, setLastTranscript] = useState('');
   const { toast } = useToast();
 
 
@@ -67,12 +68,23 @@ export function TeacherCommunicationPanel({
     stopListening,
     clearTranscript,
   } = useSpeechRecognition({
+    continuous: true,
     language: selectedLanguage,
     onResult: (result) => {
-      // Only add final results to avoid duplication
+      // Only add final results and avoid duplicates
       if (result.isFinal) {
-        console.log('📝 Adding final transcript:', result.transcript);
-        setCurrentMessage(prev => prev + result.transcript + ' ');
+        const newTranscript = result.transcript.trim();
+        console.log('📝 Final transcript received:', newTranscript);
+        console.log('📝 Last transcript was:', lastTranscript);
+        
+        // Check if this is a duplicate of the last transcript
+        if (newTranscript && newTranscript !== lastTranscript) {
+          console.log('✅ Adding new transcript:', newTranscript);
+          setCurrentMessage(prev => prev + newTranscript + ' ');
+          setLastTranscript(newTranscript);
+        } else {
+          console.log('🚫 Skipping duplicate transcript:', newTranscript);
+        }
       }
     },
     onError: (error) => {
@@ -176,12 +188,14 @@ export function TeacherCommunicationPanel({
     if (currentMessage.trim()) {
       sendMessage(currentMessage, 'speech');
       clearTranscript();
+      setLastTranscript(''); // Reset duplicate detection
     }
   };
 
   const handleTextSend = () => {
     if (currentMessage.trim()) {
       sendMessage(currentMessage, 'text');
+      setLastTranscript(''); // Reset duplicate detection
     }
   };
 
@@ -403,15 +417,7 @@ export function TeacherCommunicationPanel({
               {isSpeaking ? 'Speaking...' : 'Test Speech'}
             </Button>
             
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => speakMessage("Hello, this is a test")}
-              disabled={isSpeaking}
-            >
-              🔊 Quick Test
-            </Button>
-            
+
             <Button
               variant="outline"
               size="sm"

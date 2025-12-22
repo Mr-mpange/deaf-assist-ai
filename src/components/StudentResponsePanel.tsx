@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   Volume2, 
   VolumeX,
@@ -12,6 +13,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { SignDisplay } from '@/components/SignDisplay';
+import { DetectionPerformanceMonitor } from '@/components/DetectionPerformanceMonitor';
 import { useHandDetection, classifySign } from '@/hooks/useHandDetection';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +29,7 @@ interface StudentResponsePanelProps {
   sessionId: string;
   studentId: string;
   studentName: string;
+  isCalledOn?: boolean; // Add this to know if student is called on
   className?: string;
 }
 
@@ -34,6 +37,7 @@ export function StudentResponsePanel({
   sessionId, 
   studentId, 
   studentName,
+  isCalledOn = false,
   className = "" 
 }: StudentResponsePanelProps) {
   const [teacherMessages, setTeacherMessages] = useState<TeacherMessage[]>([]);
@@ -42,6 +46,7 @@ export function StudentResponsePanel({
   const [responseConfidence, setResponseConfidence] = useState<number>(0);
   const [hasResponded, setHasResponded] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isFastSignerMode, setIsFastSignerMode] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -51,6 +56,16 @@ export function StudentResponsePanel({
   
   const { toast } = useToast();
   const { results, detectHands, drawLandmarks } = useHandDetection(videoRef);
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   // Listen for teacher messages
   useEffect(() => {
@@ -100,7 +115,51 @@ export function StudentResponsePanel({
     };
   }, [sessionId, isMuted, toast]);
 
-  // Process hand detection results
+  // Optimized hand detection with throttling
+  const animationFrameRef = useRef<number | null>(null);
+  const lastDetectionTimeRef = useRef<number>(0);
+  const detectionIntervalRef = useRef<number>(100); // Start with 100ms intervals (10fps)
+  const fastSignerModeRef = useRef<boolean>(false);
+
+  // Start hand detection loop when responding
+  useEffect(() => {
+    if (!isResponding || !videoRef.current) {
+      // Stop detection when not responding
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      return;
+    }
+
+    const detect = async () => {
+      const now = Date.now();
+      const timeSinceLastDetection = now - lastDetectionTimeRef.current;
+      
+      // Use adaptive detection frequency
+      const currentInterval = fastSignerModeRef.current ? 50 : detectionIntervalRef.current;
+      
+      if (timeSinceLastDetection >= currentInterval) {
+        await detectHands();
+        lastDetectionTimeRef.current = now;
+      }
+      
+      if (isResponding) {
+        animationFrameRef.current = requestAnimationFrame(detect);
+      }
+    };
+    
+    detect();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [isResponding, detectHands]);
+
+  // Process hand detection results with adaptive optimization
   useEffect(() => {
     if (!results?.landmarks || !canvasRef.current || !isResponding) return;
     
@@ -108,28 +167,51 @@ export function StudentResponsePanel({
     const classified = classifySign(results.landmarks);
     
     if (classified && classified.sign !== 'DETECTING...' && classified.confidence > 0.7) {
+      // Detect fast signing patterns
+      if (classified.sign !== lastSignRef.current && lastSignRef.current !== '') {
+        // Sign changed quickly - might be a fast signer
+        fastSignerModeRef.current = true;
+        setIsFastSignerMode(true);
+        detectionIntervalRef.current = Math.max(50, detectionIntervalRef.current - 10); // Increase frequency
+        console.log('🏃‍♂️ Fast signer detected - increasing detection frequency to', detectionIntervalRef.current, 'ms');
+      }
+      
       // Check for stable sign detection
       if (classified.sign === lastSignRef.current) {
         stableSignCountRef.current++;
         
-        // If sign is stable for ~1 second (20 frames), accept it as response
-        if (stableSignCountRef.current >= 20) {
+        // Adaptive stability threshold based on detection frequency
+        const stabilityThreshold = fastSignerModeRef.current ? 3 : 8; // Fewer frames needed for fast signers
+        
+        if (stableSignCountRef.current >= stabilityThreshold) {
           setCurrentResponse(classified.sign);
           setResponseConfidence(classified.confidence);
           stableSignCountRef.current = 0;
           
-          // Auto-submit after 2 seconds of stable detection
+          // Reset to normal detection speed after successful detection
+          fastSignerModeRef.current = false;
+          setIsFastSignerMode(false);
+          detectionIntervalRef.current = 100;
+          
+          // Auto-submit after shorter time for fast signers
+          const submitDelay = fastSignerModeRef.current ? 1000 : 2000;
+          
           if (responseTimeoutRef.current) {
             clearTimeout(responseTimeoutRef.current);
           }
           
           responseTimeoutRef.current = setTimeout(() => {
             submitResponse(classified.sign, classified.confidence);
-          }, 2000);
+          }, submitDelay);
         }
       } else {
         lastSignRef.current = classified.sign;
         stableSignCountRef.current = 0;
+      }
+    } else {
+      // No good detection - slow down to save resources
+      if (detectionIntervalRef.current < 150) {
+        detectionIntervalRef.current = Math.min(150, detectionIntervalRef.current + 5);
       }
     }
   }, [results, isResponding]);
@@ -171,17 +253,60 @@ export function StudentResponsePanel({
     }
   };
 
-  const startResponding = () => {
+  const startResponding = async () => {
     setIsResponding(true);
     setCurrentResponse('');
     setResponseConfidence(0);
     stableSignCountRef.current = 0;
     lastSignRef.current = '';
+
+    // Initialize camera when starting to respond
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 640 }, 
+          height: { ideal: 480 },
+          facingMode: 'user'
+        } 
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (error) {
+      console.error('Failed to access camera:', error);
+      toast({
+        title: "Camera Error",
+        description: "Could not access camera. Please check permissions.",
+        variant: "destructive",
+      });
+      setIsResponding(false);
+    }
   };
 
   const stopResponding = () => {
     setIsResponding(false);
     setCurrentResponse('');
+    
+    // Stop detection loop
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    // Reset detection parameters
+    fastSignerModeRef.current = false;
+    setIsFastSignerMode(false);
+    detectionIntervalRef.current = 100;
+    stableSignCountRef.current = 0;
+    lastSignRef.current = '';
+    
+    // Stop camera stream
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
     
     if (responseTimeoutRef.current) {
       clearTimeout(responseTimeoutRef.current);
@@ -276,7 +401,7 @@ export function StudentResponsePanel({
               </div>
               <p className="font-medium">{latestMessage.message}</p>
               
-              {!hasResponded && (
+              {!hasResponded && !isCalledOn && (
                 <div className="mt-3 flex items-center gap-2">
                   <Button
                     variant={isResponding ? "destructive" : "default"}
@@ -295,6 +420,15 @@ export function StudentResponsePanel({
                   )}
                 </div>
               )}
+
+              {/* Show message when called on */}
+              {isCalledOn && (
+                <div className="mt-3 p-2 bg-primary/10 rounded-lg border border-primary/20">
+                  <p className="text-sm text-primary font-medium">
+                    You're called on! Use the "Your Turn to Answer" interface to respond.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Sign Language Display */}
@@ -302,61 +436,114 @@ export function StudentResponsePanel({
           </div>
         )}
 
-        {/* Response Area */}
+        {/* Response Status */}
         {isResponding && (
-          <div className="space-y-3">
-            <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-              <canvas
-                ref={canvasRef}
-                width={320}
-                height={240}
-                className="absolute inset-0 w-full h-full pointer-events-none"
-              />
-              
-              {/* Detection Status */}
-              <div className="absolute top-2 left-2">
-                <Badge variant="default" className="bg-primary/90 animate-pulse">
-                  Detecting Signs...
-                </Badge>
-              </div>
-
-              {/* Current Response */}
-              {currentResponse && (
-                <div className="absolute bottom-2 left-2 right-2">
-                  <div className="bg-black/70 text-white p-2 rounded flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-lg">{currentResponse}</span>
-                      <span className="ml-2 text-sm opacity-75">
-                        {Math.round(responseConfidence * 100)}% confidence
-                      </span>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={manualSubmit}
-                    >
-                      <Send className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="text-center text-sm text-muted-foreground">
-              <div className="flex items-center justify-center gap-2">
-                <Clock className="w-4 h-4" />
-                Hold your sign steady for 1 second to respond
-              </div>
-            </div>
+          <div className="text-center py-4">
+            <Badge variant="default" className="bg-primary/90 animate-pulse">
+              Camera is open - Make your sign response
+            </Badge>
           </div>
         )}
+
+        {/* Camera Modal for Response - Only show if not called on */}
+        <Dialog open={isResponding && !isCalledOn} onOpenChange={(open) => !open && stopResponding()}>
+          <DialogContent className="max-w-5xl w-[95vw] h-[90vh] p-0 flex flex-col">
+            <DialogHeader className="p-6 pb-4 flex-shrink-0">
+              <DialogTitle className="text-2xl text-center">
+                Respond with Sign Language
+              </DialogTitle>
+              <p className="text-center text-muted-foreground text-lg">
+                Hold your sign steady for 1 second to submit your response
+              </p>
+            </DialogHeader>
+            
+            <div className="flex-1 p-6 pt-0 min-h-0">
+              <div className="relative w-full h-full bg-muted rounded-lg overflow-hidden">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <canvas
+                  ref={canvasRef}
+                  width={640}
+                  height={480}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                />
+                
+                {/* Detection Status */}
+                <div className="absolute top-4 left-4 space-y-2">
+                  <Badge variant="default" className="bg-primary/90 animate-pulse text-lg px-4 py-2">
+                    Detecting Signs...
+                  </Badge>
+                  {isFastSignerMode && (
+                    <Badge variant="secondary" className="bg-orange-500/90 text-white text-sm px-3 py-1">
+                      🏃‍♂️ Fast Signer Mode
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Current Response */}
+                {currentResponse && (
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <div className="bg-black/80 text-white p-4 rounded-lg flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-2xl">{currentResponse}</span>
+                        <span className="ml-3 text-lg opacity-75">
+                          {Math.round(responseConfidence * 100)}% confidence
+                        </span>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="lg"
+                        onClick={manualSubmit}
+                        className="ml-4"
+                      >
+                        <Send className="w-5 h-5 mr-2" />
+                        Submit Now
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Instructions */}
+                <div className="absolute top-4 right-4">
+                  <div className="bg-black/60 text-white p-3 rounded-lg text-sm max-w-xs">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="w-4 h-4" />
+                      <span className="font-medium">Instructions:</span>
+                    </div>
+                    <ul className="space-y-1 text-xs">
+                      <li>• Position yourself clearly in the camera</li>
+                      <li>• Make your sign clearly and hold steady</li>
+                      <li>• System adapts to your signing speed</li>
+                      <li>• Fast signers get quicker detection</li>
+                      <li>• Click "Submit Now" to send immediately</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Performance Monitor (for debugging) */}
+                <div className="absolute bottom-4 left-4">
+                  <DetectionPerformanceMonitor isActive={isResponding} />
+                </div>
+
+                {/* Close Button */}
+                <div className="absolute bottom-4 right-4">
+                  <Button
+                    variant="destructive"
+                    size="lg"
+                    onClick={stopResponding}
+                  >
+                    Cancel Response
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Message History */}
         {teacherMessages.length > 1 && (

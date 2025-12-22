@@ -45,6 +45,8 @@ export function useSpeechRecognition({
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
   const recognitionRef = useRef<any>(null);
+  const lastFinalTranscriptRef = useRef<string>('');
+  const shouldContinueRef = useRef<boolean>(false); // Track if we want continuous listening
   const { toast } = useToast();
 
   useEffect(() => {
@@ -60,11 +62,16 @@ export function useSpeechRecognition({
       try {
         const recognition = new SpeechRecognition();
         
-        // Configure recognition with better settings
+        // Configure recognition with better settings for continuous listening
         recognition.continuous = continuous;
         recognition.interimResults = true;
         recognition.lang = language;
-        recognition.maxAlternatives = 3; // Get multiple alternatives
+        recognition.maxAlternatives = 1; // Use 1 for better performance
+        
+        // Additional settings for better continuous recognition
+        if (recognition.serviceURI) {
+          recognition.serviceURI = 'wss://www.google.com/speech-api/v2/recognize';
+        }
         
         // Don't set grammars - it causes errors in some browsers
         // Additional settings are handled by the browser automatically
@@ -97,14 +104,23 @@ export function useSpeechRecognition({
 
           if (finalTranscript) {
             console.log('🗣️ Final transcript:', finalTranscript);
-            setTranscript(prev => prev + finalTranscript);
+            console.log('🗣️ Last final transcript:', lastFinalTranscriptRef.current);
             
-            if (onResult) {
-              onResult({
-                transcript: finalTranscript,
-                confidence: event.results[event.results.length - 1][0].confidence || 0.9,
-                isFinal: true
-              });
+            // Check for duplicates
+            if (finalTranscript.trim() !== lastFinalTranscriptRef.current.trim()) {
+              console.log('✅ New unique transcript, processing...');
+              lastFinalTranscriptRef.current = finalTranscript.trim();
+              setTranscript(prev => prev + finalTranscript);
+              
+              if (onResult) {
+                onResult({
+                  transcript: finalTranscript,
+                  confidence: event.results[event.results.length - 1][0].confidence || 0.9,
+                  isFinal: true
+                });
+              }
+            } else {
+              console.log('🚫 Duplicate transcript ignored:', finalTranscript);
             }
           }
 
@@ -131,6 +147,17 @@ export function useSpeechRecognition({
             onError(errorMessage);
           }
           
+          // Don't show toast for 'no-speech' errors in continuous mode - just restart
+          if (event.error === 'no-speech' && continuous && shouldContinueRef.current) {
+            console.log('🔄 No speech detected, will auto-restart...');
+            return; // Don't show error toast, let it restart automatically
+          }
+          
+          // For other errors, stop continuous listening
+          if (event.error !== 'no-speech') {
+            shouldContinueRef.current = false;
+          }
+          
           toast({
             title: "Speech Recognition Error",
             description: errorMessage,
@@ -142,6 +169,22 @@ export function useSpeechRecognition({
           console.log('🔇 Speech recognition ended');
           setIsListening(false);
           setInterimTranscript('');
+          
+          // Auto-restart if continuous mode is enabled and user wants to keep listening
+          if (continuous && shouldContinueRef.current) {
+            console.log('🔄 Auto-restarting speech recognition for continuous listening...');
+            setTimeout(() => {
+              if (recognitionRef.current && shouldContinueRef.current) {
+                try {
+                  recognitionRef.current.start();
+                } catch (error) {
+                  console.warn('Failed to auto-restart speech recognition:', error);
+                  // If restart fails, stop continuous listening
+                  shouldContinueRef.current = false;
+                }
+              }
+            }, 100);
+          }
         };
 
         recognitionRef.current = recognition;
@@ -194,6 +237,9 @@ export function useSpeechRecognition({
       console.log('⚠️ Already listening');
       return;
     }
+
+    // Enable continuous listening
+    shouldContinueRef.current = true;
 
     // Check if we're in a secure context (HTTPS or localhost)
     if (!window.isSecureContext) {
@@ -276,6 +322,10 @@ export function useSpeechRecognition({
   }, [isSupported, isListening, toast]);
 
   const stopListening = useCallback(() => {
+    console.log('🛑 Stopping speech recognition...');
+    // Disable continuous listening first
+    shouldContinueRef.current = false;
+    
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
     }
@@ -284,6 +334,21 @@ export function useSpeechRecognition({
   const clearTranscript = useCallback(() => {
     setTranscript('');
     setInterimTranscript('');
+    lastFinalTranscriptRef.current = ''; // Reset duplicate detection
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      shouldContinueRef.current = false;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          console.warn('Error stopping speech recognition on cleanup:', error);
+        }
+      }
+    };
   }, []);
 
   return {

@@ -59,7 +59,19 @@ const checkCameraPermissions = async () => {
 };
 
 export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions) {
-  console.log('🎭 WebRTC initialized with:', { roomId, userId, userName, isHost });
+  // Don't initialize if we don't have essential data
+  const shouldInitialize = Boolean(roomId && userId);
+  
+  // Only log once per unique configuration
+  const configKey = `${roomId}-${userId}-${isHost}`;
+  const lastConfigRef = useRef<string>('');
+  
+  if (configKey !== lastConfigRef.current) {
+    console.log('🎭 WebRTC initialized with:', { roomId, userId, userName, isHost });
+    lastConfigRef.current = configKey;
+  }
+  
+  // ALWAYS declare all hooks in the same order - never return early before hooks!
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -74,7 +86,101 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
   const signalingChannelRef = useRef<any>(null);
   const participantsChannelRef = useRef<any>(null);
 
+  // Forward declaration of retryCamera to avoid hoisting issues
+  const retryCamera = useCallback(async (): Promise<boolean> => {
+    console.log('Retrying camera setup...');
+    
+    toast({
+      title: "Restarting Camera",
+      description: "Attempting to restart camera and microphone...",
+    });
+    
+    // Stop existing stream if any
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log(`Stopped ${track.kind} track`);
+      });
+      localStreamRef.current = null;
+      setLocalStream(null);
+    }
+    
+    // Wait a moment for cleanup
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Try to get media stream again - we'll define getMediaStream after this
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          width: { ideal: 1280, max: 1920 }, 
+          height: { ideal: 720, max: 1080 }, 
+          facingMode: 'user',
+          frameRate: { ideal: 30, max: 60 }
+        },
+        audio: { 
+          echoCancellation: true, 
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+      });
+
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+
+      // Update participants with new stream
+      if (isConnected) {
+        setParticipants(prev => prev.map(p => 
+          p.id === userId ? { ...p, stream } : p
+        ));
+        
+        // Replace tracks in all peer connections
+        const videoTrack = stream.getVideoTracks()[0];
+        const audioTrack = stream.getAudioTracks()[0];
+        
+        peerConnectionsRef.current.forEach(async (peerConnection) => {
+          if (videoTrack) {
+            const videoSender = peerConnection.getSenders().find(s => 
+              s.track && s.track.kind === 'video'
+            );
+            if (videoSender) {
+              await videoSender.replaceTrack(videoTrack);
+            }
+          }
+          
+          if (audioTrack) {
+            const audioSender = peerConnection.getSenders().find(s => 
+              s.track && s.track.kind === 'audio'
+            );
+            if (audioSender) {
+              await audioSender.replaceTrack(audioTrack);
+            }
+          }
+        });
+      }
+      
+      toast({
+        title: "Camera Restarted",
+        description: "Camera and microphone are working again!",
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Retry camera failed:', error);
+      toast({
+        title: "Camera Retry Failed",
+        description: "Could not restart camera. Please refresh the page.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  }, [shouldInitialize, isConnected, userId, toast]);
+
   const getMediaStream = useCallback(async (retryCount = 0) => {
+    if (!shouldInitialize) {
+      console.log('⚠️ Cannot get media stream - WebRTC not initialized');
+      return null;
+    }
+    
     try {
       console.log(`🎥 [${isHost ? 'HOST' : 'STUDENT'}] Requesting camera access (attempt ${retryCount + 1})...`);
       
@@ -228,7 +334,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       });
       return null;
     }
-  }, [toast]);
+  }, [shouldInitialize, toast]);
 
   // Send signaling message via Supabase Realtime
   const sendSignalingMessage = useCallback((message: SignalingMessage) => {
@@ -431,6 +537,11 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
   }, [userId, toast]);
 
   const startCall = useCallback(async () => {
+    if (!shouldInitialize) {
+      console.log('⚠️ WebRTC not initialized - missing roomId or userId');
+      return false;
+    }
+    
     if (!roomId || !userId) return false;
     
     const stream = await getMediaStream();
@@ -594,7 +705,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       console.error('Error starting call:', error);
       return false;
     }
-  }, [getMediaStream, roomId, userId, userName, isHost, toast, addParticipant, removeParticipant, handleSignalingMessage, sendSignalingMessage]);
+  }, [shouldInitialize, getMediaStream, roomId, userId, userName, isHost, toast, addParticipant, removeParticipant, handleSignalingMessage, sendSignalingMessage]);
 
   const endCall = useCallback(async () => {
     // Announce leaving to other participants
@@ -655,34 +766,37 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
   }, [roomId, userId, toast, sendSignalingMessage]);
 
   const toggleMute = useCallback(() => {
-    if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
-        
-        // Update local participant state
-        setParticipants(prev => prev.map(p => 
-          p.id === userId ? { ...p, isMuted: !audioTrack.enabled } : p
-        ));
-        
-        // Try to update database (graceful failure)
-        if (roomId && userId) {
-          supabase
-            .from('session_participants')
-            .update({ is_muted: !audioTrack.enabled })
-            .eq('session_id', roomId)
-            .eq('user_id', userId)
-            .catch(() => {
-              // Silently fail if database not available
-            });
-        }
+    if (!shouldInitialize || !localStreamRef.current) return;
+    
+    const audioTrack = localStreamRef.current.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      setIsMuted(!audioTrack.enabled);
+      
+      // Update local participant state
+      setParticipants(prev => prev.map(p => 
+        p.id === userId ? { ...p, isMuted: !audioTrack.enabled } : p
+      ));
+      
+      // Try to update database (graceful failure)
+      if (roomId && userId) {
+        supabase
+          .from('session_participants')
+          .update({ is_muted: !audioTrack.enabled })
+          .eq('session_id', roomId)
+          .eq('user_id', userId)
+          .then(() => {
+            // Database updated successfully
+          })
+          .catch(() => {
+            // Silently fail if database not available
+          });
       }
     }
   }, [roomId, userId]);
 
   const toggleVideo = useCallback(async () => {
-    if (!localStreamRef.current) return;
+    if (!shouldInitialize || !localStreamRef.current) return;
     
     const videoTrack = localStreamRef.current.getVideoTracks()[0];
     if (!videoTrack) return;
@@ -696,11 +810,14 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     } else {
       // Turn on video - need to restart the track properly
       try {
-        // Stop the old track
+        // Stop the old video track
         videoTrack.stop();
         
-        // Get a new video stream
-        const newStream = await navigator.mediaDevices.getUserMedia({
+        // Remove the old video track from the stream
+        localStreamRef.current.removeTrack(videoTrack);
+        
+        // Get a new video stream (preserve existing audio)
+        const videoStream = await navigator.mediaDevices.getUserMedia({
           video: { 
             width: { ideal: 1280, max: 1920 }, 
             height: { ideal: 720, max: 1080 }, 
@@ -710,14 +827,23 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
           audio: false // Only get video, keep existing audio
         });
         
-        const newVideoTrack = newStream.getVideoTracks()[0];
+        const newVideoTrack = videoStream.getVideoTracks()[0];
         
-        // Replace the video track in the local stream
-        localStreamRef.current.removeTrack(videoTrack);
+        // Add the new video track to the existing stream
         localStreamRef.current.addTrack(newVideoTrack);
         
-        // Update the stream reference
-        setLocalStream(localStreamRef.current);
+        // Force update the stream reference to trigger re-render
+        const updatedStream = new MediaStream([
+          ...localStreamRef.current.getAudioTracks(),
+          newVideoTrack
+        ]);
+        
+        localStreamRef.current = updatedStream;
+        setLocalStream(updatedStream);
+        
+        console.log('🎥 Camera restarted - new stream:', updatedStream);
+        console.log('🎥 New video track:', newVideoTrack);
+        console.log('🎥 Video track settings:', newVideoTrack.getSettings());
         
         // Replace video track in all peer connections
         peerConnectionsRef.current.forEach(async (peerConnection) => {
@@ -725,7 +851,11 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
             s.track && s.track.kind === 'video'
           );
           if (sender) {
-            await sender.replaceTrack(newVideoTrack);
+            try {
+              await sender.replaceTrack(newVideoTrack);
+            } catch (error) {
+              console.error('Error replacing track in peer connection:', error);
+            }
           }
         });
         
@@ -737,6 +867,23 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         });
       } catch (error) {
         console.error('Error restarting video:', error);
+        
+        // Fallback: try to use the retryCamera function instead
+        try {
+          console.log('Attempting fallback camera restart...');
+          const success = await retryCamera();
+          if (success) {
+            setIsVideoOff(false);
+            toast({
+              title: "Camera Restarted",
+              description: "Video is now active (fallback method)",
+            });
+            return;
+          }
+        } catch (fallbackError) {
+          console.error('Fallback camera restart also failed:', fallbackError);
+        }
+        
         toast({
           title: "Camera Error",
           description: "Could not restart camera. Try refreshing the page.",
@@ -758,6 +905,9 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         .update({ is_video_off: willTurnOff })
         .eq('session_id', roomId)
         .eq('user_id', userId)
+        .then(() => {
+          // Database updated successfully
+        })
         .catch(() => {
           // Silently fail if database not available
         });
@@ -861,69 +1011,25 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
     };
   }, []);
 
-  const retryCamera = useCallback(async () => {
-    console.log('Retrying camera setup...');
-    
-    toast({
-      title: "Restarting Camera",
-      description: "Attempting to restart camera and microphone...",
-    });
-    
-    // Stop existing stream if any
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        track.stop();
-        console.log(`Stopped ${track.kind} track`);
-      });
-      localStreamRef.current = null;
-      setLocalStream(null);
-    }
-    
-    // Wait a moment for cleanup
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Try to get media stream again
-    const stream = await getMediaStream();
-    if (stream) {
-      // Update participants with new stream
-      if (isConnected) {
-        setParticipants(prev => prev.map(p => 
-          p.id === userId ? { ...p, stream } : p
-        ));
-        
-        // Replace tracks in all peer connections
-        const videoTrack = stream.getVideoTracks()[0];
-        const audioTrack = stream.getAudioTracks()[0];
-        
-        peerConnectionsRef.current.forEach(async (peerConnection) => {
-          if (videoTrack) {
-            const videoSender = peerConnection.getSenders().find(s => 
-              s.track && s.track.kind === 'video'
-            );
-            if (videoSender) {
-              await videoSender.replaceTrack(videoTrack);
-            }
-          }
-          
-          if (audioTrack) {
-            const audioSender = peerConnection.getSenders().find(s => 
-              s.track && s.track.kind === 'audio'
-            );
-            if (audioSender) {
-              await audioSender.replaceTrack(audioTrack);
-            }
-          }
-        });
-      }
-      
-      toast({
-        title: "Camera Restarted",
-        description: "Camera and microphone are working again!",
-      });
-    }
-    
-    return !!stream;
-  }, [getMediaStream, isConnected, userId, toast]);
+  // Return appropriate values based on initialization state
+  if (!shouldInitialize) {
+    return {
+      localStream: null,
+      participants: [],
+      isConnected: false,
+      isMuted: false,
+      isVideoOff: false,
+      isScreenSharing: false,
+      screenStream: null,
+      startCall: async () => false,
+      endCall: async () => {},
+      toggleMute: () => {},
+      toggleVideo: async () => {},
+      startScreenShare: async () => null,
+      stopScreenShare: async () => {},
+      retryCamera: async () => false,
+    };
+  }
 
   return {
     localStream,

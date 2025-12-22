@@ -22,6 +22,7 @@ export function SpeechTest() {
     stopListening,
     clearTranscript,
   } = useSpeechRecognition({
+    continuous: true,
     onResult: (result) => {
       if (result.isFinal) {
         setResults(prev => [...prev, result.transcript]);

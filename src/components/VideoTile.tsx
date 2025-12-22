@@ -48,71 +48,83 @@ export function VideoTile({
     if (videoRef.current && stream) {
       console.log('Setting video stream for:', name, stream);
       const video = videoRef.current;
-      video.srcObject = stream;
       
-      // Set video properties for better compatibility
-      video.muted = isLocal; // Local video should be muted to prevent feedback
-      video.playsInline = true;
-      video.autoplay = true;
+      // Force clear the old stream first
+      video.srcObject = null;
       
-      // Reset loading states
-      setIsVideoLoading(true);
-      setIsVideoPlaying(false);
-      
-      // Add event listeners
-      video.onloadedmetadata = () => {
-        console.log('Video metadata loaded for:', name);
-        setIsVideoLoading(false);
-      };
-      
-      video.oncanplay = () => {
-        console.log('Video can play for:', name);
-        setIsVideoLoading(false);
-      };
-      
-      video.onplay = () => {
-        console.log('Video started playing for:', name);
-        setIsVideoPlaying(true);
-        setIsVideoLoading(false);
-      };
-      
-      video.onpause = () => {
+      // Small delay to ensure cleanup
+      setTimeout(() => {
+        video.srcObject = stream;
+        
+        // Set video properties for better compatibility
+        video.muted = isLocal; // Local video should be muted to prevent feedback
+        video.playsInline = true;
+        video.autoplay = true;
+        
+        // Reset loading states
+        setIsVideoLoading(true);
         setIsVideoPlaying(false);
-      };
-      
-      video.onerror = (e) => {
-        console.error('Video error for', name, ':', e);
-        setIsVideoLoading(false);
-        setIsVideoPlaying(false);
-      };
-      
-      // Ensure video plays with multiple attempts
-      const playVideo = async () => {
-        try {
-          await video.play();
-          console.log('Video playing successfully for:', name);
-        } catch (error) {
-          console.warn('Video play failed for', name, ':', error);
+        
+        // Add event listeners
+        video.onloadedmetadata = () => {
+          console.log('Video metadata loaded for:', name);
           setIsVideoLoading(false);
-          
-          // Try again after a short delay
-          setTimeout(async () => {
-            try {
-              await video.play();
-              console.log('Video playing on retry for:', name);
-            } catch (retryError) {
-              console.error('Video play retry failed for', name, ':', retryError);
-              setIsVideoLoading(false);
-            }
-          }, 100);
-        }
-      };
-      
-      playVideo();
+        };
+        
+        video.oncanplay = () => {
+          console.log('Video can play for:', name);
+          setIsVideoLoading(false);
+        };
+        
+        video.onplay = () => {
+          console.log('Video started playing for:', name);
+          setIsVideoPlaying(true);
+          setIsVideoLoading(false);
+        };
+        
+        video.onpause = () => {
+          setIsVideoPlaying(false);
+        };
+        
+        video.onerror = (e) => {
+          console.error('Video error for', name, ':', e);
+          setIsVideoLoading(false);
+          setIsVideoPlaying(false);
+        };
+        
+        // Ensure video plays with multiple attempts
+        const playVideo = async () => {
+          try {
+            await video.play();
+            console.log('Video playing successfully for:', name);
+          } catch (error) {
+            console.warn('Video play failed for', name, ':', error);
+            setIsVideoLoading(false);
+            
+            // Try again after a short delay
+            setTimeout(async () => {
+              try {
+                await video.play();
+                console.log('Video playing on retry for:', name);
+              } catch (retryError) {
+                console.error('Video play retry failed for', name, ':', retryError);
+                setIsVideoLoading(false);
+              }
+            }, 100);
+          }
+        };
+        
+        playVideo();
+      }, 50);
     } else {
       // No stream, reset states
       setIsVideoLoading(false);
       setIsVideoPlaying(false);
+      
+      // Clear video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
       
       // If this is a local user and no stream after 10 seconds, show timeout
       if (isLocal) {

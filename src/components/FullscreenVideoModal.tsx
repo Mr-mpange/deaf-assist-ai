@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Crown, Mic, MicOff, VideoOff } from 'lucide-react';
+import { X, Crown, Mic, MicOff, VideoOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
@@ -30,29 +30,189 @@ export function FullscreenVideoModal({
   isScreenShare = false,
 }: FullscreenVideoModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [forceRefresh, setForceRefresh] = useState(0);
+  const [isVideoLoading, setIsVideoLoading] = useState(true);
+  const [hasVideoError, setHasVideoError] = useState(false);
+
+  // Force refresh mechanism if video doesn't load
+  useEffect(() => {
+    if (isOpen && stream && !isVideoOff) {
+      const refreshTimer = setTimeout(() => {
+        console.log('🔄 Force refreshing fullscreen video...');
+        setForceRefresh(prev => prev + 1);
+      }, 2000); // If video doesn't load in 2 seconds, force refresh
+
+      return () => clearTimeout(refreshTimer);
+    }
+  }, [isOpen, stream, isVideoOff]);
+
+  // Debug logging
+  useEffect(() => {
+    if (isOpen) {
+      console.log('🎬 Fullscreen modal opened with:', {
+        name,
+        hasStream: !!stream,
+        streamId: stream?.id,
+        videoTracks: stream?.getVideoTracks().length || 0,
+        audioTracks: stream?.getAudioTracks().length || 0,
+        isVideoOff,
+        isLocal,
+        isScreenShare
+      });
+      
+      if (stream) {
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          console.log('📹 Video track details:', {
+            enabled: videoTrack.enabled,
+            readyState: videoTrack.readyState,
+            settings: videoTrack.getSettings()
+          });
+        }
+      }
+    }
+  }, [isOpen, stream, name, isVideoOff, isLocal, isScreenShare]);
 
   useEffect(() => {
     if (videoRef.current && stream && isOpen) {
+      console.log('🎬 Setting fullscreen video stream:', stream);
       const video = videoRef.current;
-      video.srcObject = stream;
       
-      // Ensure video plays
-      const playVideo = async () => {
-        try {
-          await video.play();
-        } catch (error) {
-          // Video play failed, but this is common and usually not critical
-          setTimeout(() => {
-            video.play().catch(() => {
-              // Final attempt failed, but don't show error to user
-            });
-          }, 100);
+      // Clear any existing stream first
+      video.srcObject = null;
+      
+      // Force a small delay to ensure cleanup
+      setTimeout(() => {
+        // Set video properties for better compatibility
+        video.muted = isLocal; // Local video should be muted to prevent feedback
+        video.playsInline = true;
+        video.autoplay = true;
+        
+        // Set the new stream
+        video.srcObject = stream;
+        
+        console.log('🎬 Stream set on video element:', {
+          streamId: stream.id,
+          videoTracks: stream.getVideoTracks().length,
+          audioTracks: stream.getAudioTracks().length,
+          videoElement: video,
+          videoSrc: video.srcObject
+        });
+        
+        // Check video track details
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          console.log('📹 Video track in fullscreen:', {
+            id: videoTrack.id,
+            enabled: videoTrack.enabled,
+            readyState: videoTrack.readyState,
+            settings: videoTrack.getSettings(),
+            constraints: videoTrack.getConstraints()
+          });
         }
-      };
-      
-      playVideo();
+        
+        // Add event listeners for better debugging
+        video.onloadedmetadata = () => {
+          console.log('✅ Fullscreen video metadata loaded');
+          console.log('📐 Video dimensions:', {
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+            clientWidth: video.clientWidth,
+            clientHeight: video.clientHeight,
+            offsetWidth: video.offsetWidth,
+            offsetHeight: video.offsetHeight
+          });
+          setIsVideoLoading(false);
+          setHasVideoError(false);
+        };
+        
+        video.oncanplay = () => {
+          console.log('✅ Fullscreen video can play');
+          setIsVideoLoading(false);
+          setHasVideoError(false);
+        };
+        
+        video.onplay = () => {
+          console.log('✅ Fullscreen video started playing');
+          setIsVideoLoading(false);
+          setHasVideoError(false);
+        };
+        
+        video.onerror = (e) => {
+          console.error('❌ Fullscreen video error:', e);
+          setIsVideoLoading(false);
+          setHasVideoError(true);
+        };
+        
+        video.onloadstart = () => {
+          console.log('🔄 Fullscreen video load started');
+          setIsVideoLoading(true);
+          setHasVideoError(false);
+        };
+        
+        video.onwaiting = () => {
+          console.log('⏳ Fullscreen video waiting for data');
+        };
+        
+        video.onstalled = () => {
+          console.log('⚠️ Fullscreen video stalled');
+        };
+        
+        // Ensure video plays with multiple attempts
+        const playVideo = async () => {
+          try {
+            console.log('🎯 Attempting to play fullscreen video...');
+            await video.play();
+            console.log('✅ Fullscreen video playing successfully');
+          } catch (error) {
+            console.warn('⚠️ Fullscreen video play failed, retrying...', error);
+            
+            // Try again after a short delay
+            setTimeout(async () => {
+              try {
+                await video.play();
+                console.log('✅ Fullscreen video playing on retry');
+              } catch (retryError) {
+                console.error('❌ Fullscreen video play retry failed:', retryError);
+                
+                // Final attempt with a longer delay
+                setTimeout(async () => {
+                  try {
+                    video.load(); // Force reload
+                    await video.play();
+                    console.log('✅ Fullscreen video playing on final retry');
+                  } catch (finalError) {
+                    console.error('❌ All fullscreen video play attempts failed:', finalError);
+                  }
+                }, 500);
+              }
+            }, 200);
+          }
+        };
+        
+        // Wait a bit for the stream to be ready
+        setTimeout(playVideo, 100);
+        
+        // Additional fallback: if video still doesn't play after 3 seconds, try recreating
+        setTimeout(() => {
+          if (video.paused && video.readyState === 0) {
+            console.log('🔄 Video still not loaded, forcing recreation...');
+            video.load();
+            setTimeout(() => video.play().catch(console.error), 100);
+          } else if (video.videoWidth === 0 || video.videoHeight === 0) {
+            console.log('🔄 Video has no dimensions, trying to fix...');
+            // Try to force a refresh by cloning the stream
+            const clonedStream = stream.clone();
+            video.srcObject = clonedStream;
+            setTimeout(() => video.play().catch(console.error), 100);
+          }
+        }, 3000);
+      }, 50);
+    } else if (videoRef.current && !stream) {
+      // Clear video when no stream
+      videoRef.current.srcObject = null;
     }
-  }, [stream, isOpen]);
+  }, [stream, isOpen, isLocal]);
 
   // Close on Escape key
   useEffect(() => {
@@ -93,21 +253,82 @@ export function FullscreenVideoModal({
             <X className="w-6 h-6" />
           </Button>
 
+          {/* Debug refresh button (development only) */}
+          {process.env.NODE_ENV === 'development' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                console.log('🔄 Manual refresh triggered');
+                setForceRefresh(prev => prev + 1);
+              }}
+              className="absolute top-4 right-16 z-50 bg-black/50 hover:bg-black/70 text-white text-xs"
+            >
+              Refresh Video
+            </Button>
+          )}
+
           {/* Video content */}
           {stream && !isVideoOff ? (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted={isLocal}
-              onClick={(e) => e.stopPropagation()}
-              className="max-w-full max-h-full object-contain"
-              style={{ 
-                backgroundColor: '#000',
-                width: 'auto',
-                height: 'auto'
-              }}
-            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <video
+                key={`fullscreen-${stream.id}-${forceRefresh}`}
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted={isLocal}
+                controls={false}
+                disablePictureInPicture
+                onClick={(e) => e.stopPropagation()}
+                className="w-full h-full object-cover"
+                style={{ 
+                  backgroundColor: '#000'
+                }}
+                onLoadedMetadata={() => {
+                  console.log('📹 Fullscreen video metadata loaded');
+                }}
+                onCanPlay={() => {
+                  console.log('📹 Fullscreen video can play');
+                }}
+                onPlay={() => {
+                  console.log('📹 Fullscreen video started playing');
+                }}
+                onError={(e) => {
+                  console.error('📹 Fullscreen video error:', e);
+                }}
+              />
+              
+              {/* Loading overlay */}
+              {isVideoLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                  <div className="text-center text-white">
+                    <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
+                    <p className="text-lg">Loading video...</p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Error overlay */}
+              {hasVideoError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                  <div className="text-center text-white">
+                    <VideoOff className="w-12 h-12 mx-auto mb-4 text-red-400" />
+                    <p className="text-lg mb-4">Video failed to load</p>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setForceRefresh(prev => prev + 1);
+                        setHasVideoError(false);
+                        setIsVideoLoading(true);
+                      }}
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center text-white">
               <div className="w-32 h-32 rounded-full bg-primary/20 flex items-center justify-center mb-4">
@@ -157,6 +378,24 @@ export function FullscreenVideoModal({
               </div>
             </div>
           </div>
+
+          {/* Debug info (only in development) */}
+          {process.env.NODE_ENV === 'development' && stream && (
+            <div className="absolute top-20 left-6">
+              <div className="bg-black/70 rounded-lg p-3 text-xs text-white/80">
+                <p><strong>Stream Debug:</strong></p>
+                <p>ID: {stream.id}</p>
+                <p>Video Tracks: {stream.getVideoTracks().length}</p>
+                <p>Audio Tracks: {stream.getAudioTracks().length}</p>
+                {stream.getVideoTracks()[0] && (
+                  <>
+                    <p>Video Enabled: {stream.getVideoTracks()[0].enabled ? 'Yes' : 'No'}</p>
+                    <p>Video State: {stream.getVideoTracks()[0].readyState}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Instructions */}
           <div className="absolute top-6 left-6">

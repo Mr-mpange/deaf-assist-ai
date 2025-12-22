@@ -41,8 +41,7 @@ import { TeacherCommunicationPanel } from '@/components/TeacherCommunicationPane
 import { StudentResponsePanel } from '@/components/StudentResponsePanel';
 import { FullscreenVideoModal } from '@/components/FullscreenVideoModal';
 import { StudentCameraFix } from '@/components/StudentCameraFix';
-
-
+import { WebRTCDebugInfo } from '@/components/WebRTCDebugInfo';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -80,17 +79,31 @@ export default function LiveSessions() {
   const [isLoading, setIsLoading] = useState(true);
   const [calledStudentId, setCalledStudentId] = useState<string | null>(null);
   const [fullscreenParticipant, setFullscreenParticipant] = useState<any | null>(null);
+  const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
+  const [autoTimeoutId, setAutoTimeoutId] = useState<NodeJS.Timeout | null>(null);
   
   const isTeacher = role === 'teacher' || role === 'admin';
   const isHost = activeSession?.host_id === user?.id;
 
   // Memoize WebRTC config to prevent re-initialization
-  const webRTCConfig = useMemo(() => ({
-    roomId: activeSession?.id || '',
-    userId: user?.id || '',
-    userName: profile?.name || user?.email?.split('@')[0] || user?.id?.slice(0, 8) || 'Anonymous',
-    isHost: isHost,
-  }), [activeSession?.id, user?.id, profile?.name, user?.email, isHost]);
+  const webRTCConfig = useMemo(() => {
+    // Only create config if we have essential data
+    if (!activeSession?.id || !user?.id) {
+      return {
+        roomId: '',
+        userId: '',
+        userName: 'Anonymous',
+        isHost: false,
+      };
+    }
+
+    return {
+      roomId: activeSession.id,
+      userId: user.id,
+      userName: profile?.name || user.email?.split('@')[0] || user.id.slice(0, 8) || 'Anonymous',
+      isHost: activeSession.host_id === user.id,
+    };
+  }, [activeSession?.id, activeSession?.host_id, user?.id, profile?.name, user?.email]);
 
   const {
     participants,
@@ -108,6 +121,29 @@ export default function LiveSessions() {
     stopScreenShare,
     retryCamera,
   } = useWebRTC(webRTCConfig);
+
+  // Cancel auto-timeout when participants join
+  useEffect(() => {
+    if (participants.length > 1 && autoTimeoutId && isHost) {
+      console.log('✅ Participants joined - canceling auto-timeout');
+      clearTimeout(autoTimeoutId);
+      setAutoTimeoutId(null);
+      
+      toast({
+        title: "Session Active",
+        description: "Participants have joined - session will continue",
+      });
+    }
+  }, [participants.length, autoTimeoutId, isHost, toast]);
+
+  // Cleanup auto-timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (autoTimeoutId) {
+        clearTimeout(autoTimeoutId);
+      }
+    };
+  }, [autoTimeoutId]);
 
   const {
     isRecording,
@@ -261,6 +297,49 @@ export default function LiveSessions() {
     setIsLoading(false);
   };
 
+  // Auto-end session if no participants join within 30 minutes
+  const checkAndAutoEndSession = async (sessionId: string) => {
+    try {
+      // Check if there are any participants (excluding the host)
+      const { data: participantCount } = await supabase
+        .from('session_participants')
+        .select('id', { count: 'exact' })
+        .eq('session_id', sessionId)
+        .neq('user_id', user?.id); // Exclude the host
+      
+      const hasParticipants = (participantCount?.length || 0) > 0;
+      
+      if (!hasParticipants) {
+        console.log('🕐 Auto-ending session after 30 minutes - no participants joined');
+        
+        // End the session
+        await supabase
+          .from('live_sessions')
+          .update({ status: 'ended' })
+          .eq('id', sessionId);
+        
+        // Clear the active session
+        setActiveSession(null);
+        setSessionStartTime(null);
+        
+        toast({
+          title: "Session Auto-Ended",
+          description: "Session ended automatically after 30 minutes with no participants",
+          variant: "default",
+        });
+        
+        // End the call if still connected
+        if (isConnected) {
+          endCall();
+        }
+      } else {
+        console.log('✅ Session has participants, keeping alive');
+      }
+    } catch (error) {
+      console.error('Error checking session participants:', error);
+    }
+  };
+
   const handleCreateSession = async () => {
     if (!newSessionTitle.trim() || !user) {
       toast({
@@ -298,6 +377,16 @@ export default function LiveSessions() {
     setNewSessionTitle('');
     setIsCreating(false);
     
+    // Set session start time for auto-timeout
+    setSessionStartTime(new Date());
+    
+    // Set up auto-timeout: end session after 30 minutes if no participants join
+    const timeoutId = setTimeout(() => {
+      checkAndAutoEndSession(data.id);
+    }, 30 * 60 * 1000); // 30 minutes
+    
+    setAutoTimeoutId(timeoutId);
+    
     toast({
       title: "Session Created",
       description: `"${data.title}" is now live!`,
@@ -312,7 +401,7 @@ export default function LiveSessions() {
 
   // Auto-start call when session becomes active
   useEffect(() => {
-    if (activeSession && !isConnected) {
+    if (activeSession?.id && !isConnected && user?.id) {
       console.log('🚀 Auto-starting call for session:', activeSession.id);
       
       // Small delay to ensure state is fully updated
@@ -325,20 +414,24 @@ export default function LiveSessions() {
             description: "Could not start camera. Check permissions and try again.",
             variant: "destructive",
           });
-        } else if (isHost && localStream) {
-          // Auto-start recording for host after camera is ready
-          setTimeout(() => {
-            if (localStream) {
-              startRecording(localStream);
-            }
-          }, 1000);
         }
-      }, 200);
+      }, 500); // Increased delay to prevent race conditions
       
       return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSession?.id, isConnected]);
+  }, [activeSession?.id, isConnected, user?.id, startCall, toast]);
+
+  // Auto-start recording for host when camera is ready
+  useEffect(() => {
+    if (isHost && localStream && isConnected && !isRecording) {
+      console.log('🎥 Auto-starting recording for host');
+      const timer = setTimeout(() => {
+        startRecording(localStream);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isHost, localStream, isConnected, isRecording, startRecording]);
 
   const handleEndSession = async () => {
     // Stop recording first
@@ -362,6 +455,14 @@ export default function LiveSessions() {
     endCall();
     setActiveSession(null);
     setCalledStudentId(null);
+    setSessionStartTime(null);
+    
+    // Clear auto-timeout if it exists
+    if (autoTimeoutId) {
+      clearTimeout(autoTimeoutId);
+      setAutoTimeoutId(null);
+    }
+    
     fetchSessions();
   };
 
@@ -553,7 +654,7 @@ export default function LiveSessions() {
                   
                   {participants.map((participant) => (
                     <VideoTile
-                      key={participant.id}
+                      key={`${participant.id}-${participant.stream?.id || 'no-stream'}-${participant.isVideoOff ? 'off' : 'on'}`}
                       stream={participant.stream}
                       name={participant.name}
                       isHost={participant.isHost}
@@ -657,6 +758,7 @@ export default function LiveSessions() {
                   sessionId={activeSession.id}
                   studentId={user.id}
                   studentName={profile.name}
+                  isCalledOn={calledStudentId === user.id}
                 />
               )}
 
@@ -708,6 +810,15 @@ export default function LiveSessions() {
                   onRetryCamera={retryCamera}
                 />
               )}
+
+              {/* Debug Info */}
+              <WebRTCDebugInfo
+                participants={participants}
+                isConnected={isConnected}
+                localStream={localStream}
+                activeSession={activeSession}
+                user={user}
+              />
             </div>
           </div>
 
