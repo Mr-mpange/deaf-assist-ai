@@ -34,13 +34,22 @@ export function FullscreenVideoModal({
   const [isVideoLoading, setIsVideoLoading] = useState(true);
   const [hasVideoError, setHasVideoError] = useState(false);
 
-  // Force refresh mechanism if video doesn't load
+  // Force refresh mechanism - trigger Force Fix approach if video doesn't work
   useEffect(() => {
     if (isOpen && stream && !isVideoOff) {
       const refreshTimer = setTimeout(() => {
-        console.log('🔄 Force refreshing fullscreen video...');
+        console.log('🔄 Auto-triggering Force Fix approach (backup)...');
+        if (videoRef.current) {
+          const video = videoRef.current;
+          video.srcObject = null;
+          video.load();
+          setTimeout(() => {
+            video.srcObject = stream;
+            video.play().catch(console.error);
+          }, 200);
+        }
         setForceRefresh(prev => prev + 1);
-      }, 2000); // If video doesn't load in 2 seconds, force refresh
+      }, 500); // Trigger much earlier - after 500ms
 
       return () => clearTimeout(refreshTimer);
     }
@@ -73,144 +82,108 @@ export function FullscreenVideoModal({
     }
   }, [isOpen, stream, name, isVideoOff, isLocal, isScreenShare]);
 
+  // Auto-click the Force Fix approach when modal opens
+  useEffect(() => {
+    if (isOpen && stream && videoRef.current) {
+      // Wait for modal to be fully rendered, then auto-trigger Force Fix
+      const autoFixTimer = setTimeout(() => {
+        console.log('🔄 Auto-clicking Force Fix approach...');
+        // Simulate the exact same logic as the Force Fix button
+        const video = videoRef.current;
+        if (video && stream) {
+          video.srcObject = null;
+          video.load();
+          setTimeout(() => {
+            video.srcObject = stream;
+            video.play().catch(console.error);
+          }, 200);
+        }
+      }, 300); // Wait a bit longer for modal to be ready
+
+      return () => clearTimeout(autoFixTimer);
+    }
+  }, [isOpen, stream]);
+
   useEffect(() => {
     if (videoRef.current && stream && isOpen) {
       console.log('🎬 Setting fullscreen video stream:', stream);
       const video = videoRef.current;
       
-      // Clear any existing stream first
-      video.srcObject = null;
+      // Set video properties for better compatibility
+      video.muted = isLocal; // Local video should be muted to prevent feedback
+      video.playsInline = true;
+      video.autoplay = true;
       
-      // Force a small delay to ensure cleanup
-      setTimeout(() => {
-        // Set video properties for better compatibility
-        video.muted = isLocal; // Local video should be muted to prevent feedback
-        video.playsInline = true;
-        video.autoplay = true;
-        
-        // Set the new stream
-        video.srcObject = stream;
-        
-        console.log('🎬 Stream set on video element:', {
-          streamId: stream.id,
-          videoTracks: stream.getVideoTracks().length,
-          audioTracks: stream.getAudioTracks().length,
-          videoElement: video,
-          videoSrc: video.srcObject
+      console.log('🎬 Stream set on video element:', {
+        streamId: stream.id,
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length,
+        videoElement: video,
+        videoSrc: video.srcObject
+      });
+      
+      // Check video track details
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        console.log('📹 Video track in fullscreen:', {
+          id: videoTrack.id,
+          enabled: videoTrack.enabled,
+          readyState: videoTrack.readyState,
+          settings: videoTrack.getSettings(),
+          constraints: videoTrack.getConstraints()
         });
         
-        // Check video track details
-        const videoTrack = stream.getVideoTracks()[0];
-        if (videoTrack) {
-          console.log('📹 Video track in fullscreen:', {
-            id: videoTrack.id,
-            enabled: videoTrack.enabled,
-            readyState: videoTrack.readyState,
-            settings: videoTrack.getSettings(),
-            constraints: videoTrack.getConstraints()
-          });
-          
-          // Force video track to be enabled
-          videoTrack.enabled = true;
-        }
-        
-        // Add event listeners for better debugging
-        video.onloadedmetadata = () => {
-          console.log('✅ Fullscreen video metadata loaded');
-          console.log('📐 Video dimensions:', {
-            videoWidth: video.videoWidth,
-            videoHeight: video.videoHeight,
-            clientWidth: video.clientWidth,
-            clientHeight: video.clientHeight,
-            offsetWidth: video.offsetWidth,
-            offsetHeight: video.offsetHeight
-          });
-          setIsVideoLoading(false);
-          setHasVideoError(false);
-        };
-        
-        video.oncanplay = () => {
-          console.log('✅ Fullscreen video can play');
-          setIsVideoLoading(false);
-          setHasVideoError(false);
-        };
-        
-        video.onplay = () => {
-          console.log('✅ Fullscreen video started playing');
-          setIsVideoLoading(false);
-          setHasVideoError(false);
-        };
-        
-        video.onerror = (e) => {
-          console.error('❌ Fullscreen video error:', e);
-          setIsVideoLoading(false);
-          setHasVideoError(true);
-        };
-        
-        video.onloadstart = () => {
-          console.log('🔄 Fullscreen video load started');
-          setIsVideoLoading(true);
-          setHasVideoError(false);
-        };
-        
-        video.onwaiting = () => {
-          console.log('⏳ Fullscreen video waiting for data');
-        };
-        
-        video.onstalled = () => {
-          console.log('⚠️ Fullscreen video stalled');
-        };
-        
-        // Ensure video plays with multiple attempts
-        const playVideo = async () => {
-          try {
-            console.log('🎯 Attempting to play fullscreen video...');
-            await video.play();
-            console.log('✅ Fullscreen video playing successfully');
-          } catch (error) {
-            console.warn('⚠️ Fullscreen video play failed, retrying...', error);
-            
-            // Try again after a short delay
-            setTimeout(async () => {
-              try {
-                await video.play();
-                console.log('✅ Fullscreen video playing on retry');
-              } catch (retryError) {
-                console.error('❌ Fullscreen video play retry failed:', retryError);
-                
-                // Final attempt with a longer delay
-                setTimeout(async () => {
-                  try {
-                    video.load(); // Force reload
-                    await video.play();
-                    console.log('✅ Fullscreen video playing on final retry');
-                  } catch (finalError) {
-                    console.error('❌ All fullscreen video play attempts failed:', finalError);
-                  }
-                }, 500);
-              }
-            }, 200);
-          }
-        };
-        
-        // Wait a bit for the stream to be ready
-        setTimeout(playVideo, 100);
-        
-        // Additional fallback: if video still doesn't play after 3 seconds, try recreating
-        setTimeout(() => {
-          if (video.paused && video.readyState === 0) {
-            console.log('🔄 Video still not loaded, forcing recreation...');
-            video.load();
-            setTimeout(() => video.play().catch(console.error), 100);
-          } else if (video.videoWidth === 0 || video.videoHeight === 0) {
-            console.log('🔄 Video has no dimensions, trying to fix...');
-            // Try to force a refresh by cloning the stream
-            const clonedStream = stream.clone();
-            video.srcObject = clonedStream;
-            setTimeout(() => video.play().catch(console.error), 100);
-          }
-        }, 3000);
-      }, 50);
+        // Force video track to be enabled
+        videoTrack.enabled = true;
+      }
+      
+      // Add event listeners for better debugging
+      video.onloadedmetadata = () => {
+        console.log('✅ Fullscreen video metadata loaded');
+        console.log('📐 Video dimensions:', {
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          clientWidth: video.clientWidth,
+          clientHeight: video.clientHeight,
+          offsetWidth: video.offsetWidth,
+          offsetHeight: video.offsetHeight
+        });
+        setIsVideoLoading(false);
+        setHasVideoError(false);
+      };
+      
+      video.oncanplay = () => {
+        console.log('✅ Fullscreen video can play');
+        setIsVideoLoading(false);
+        setHasVideoError(false);
+      };
+      
+      video.onplay = () => {
+        console.log('✅ Fullscreen video started playing');
+        setIsVideoLoading(false);
+        setHasVideoError(false);
+      };
+      
+      video.onerror = (e) => {
+        console.error('❌ Fullscreen video error:', e);
+        setIsVideoLoading(false);
+        setHasVideoError(true);
+      };
+      
+      video.onloadstart = () => {
+        console.log('🔄 Fullscreen video load started');
+        setIsVideoLoading(true);
+        setHasVideoError(false);
+      };
+      
+      video.onwaiting = () => {
+        console.log('⏳ Fullscreen video waiting for data');
+      };
+      
+      video.onstalled = () => {
+        console.log('⚠️ Fullscreen video stalled');
+      };
+      
     } else if (videoRef.current && !stream) {
       // Clear video when no stream
       videoRef.current.srcObject = null;
@@ -258,18 +231,40 @@ export function FullscreenVideoModal({
 
           {/* Debug refresh button (development only) */}
           {process.env.NODE_ENV === 'development' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                console.log('🔄 Manual refresh triggered');
-                setForceRefresh(prev => prev + 1);
-              }}
-              className="absolute top-4 right-16 z-50 bg-black/50 hover:bg-black/70 text-white text-xs"
-            >
-              Refresh Video
-            </Button>
+            <div className="absolute top-4 right-16 z-50 space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('🔄 Manual refresh triggered');
+                  setForceRefresh(prev => prev + 1);
+                }}
+                className="bg-black/50 hover:bg-black/70 text-white text-xs"
+              >
+                Refresh Video
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('🔄 Force recreate video element');
+                  if (videoRef.current && stream) {
+                    const video = videoRef.current;
+                    video.srcObject = null;
+                    video.load();
+                    setTimeout(() => {
+                      video.srcObject = stream;
+                      video.play().catch(console.error);
+                    }, 200);
+                  }
+                }}
+                className="bg-black/50 hover:bg-black/70 text-white text-xs"
+              >
+                Force Fix
+              </Button>
+            </div>
           )}
 
           {/* Video content */}
@@ -284,9 +279,11 @@ export function FullscreenVideoModal({
                 controls={false}
                 disablePictureInPicture
                 onClick={(e) => e.stopPropagation()}
-                className="w-full h-full object-cover"
+                className="w-full h-full"
                 style={{ 
-                  backgroundColor: '#000'
+                  backgroundColor: '#000',
+                  objectFit: 'contain',
+                  display: 'block'
                 }}
                 onLoadedMetadata={() => {
                   console.log('📹 Fullscreen video metadata loaded');
