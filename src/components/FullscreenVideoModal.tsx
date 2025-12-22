@@ -109,6 +109,9 @@ export function FullscreenVideoModal({
             settings: videoTrack.getSettings(),
             constraints: videoTrack.getConstraints()
           });
+          
+          // Force video track to be enabled
+          videoTrack.enabled = true;
         }
         
         // Add event listeners for better debugging

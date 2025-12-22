@@ -127,6 +127,22 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       localStreamRef.current = stream;
       setLocalStream(stream);
 
+      // Initialize mute state based on actual track state (for retryCamera)
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        const actualMuteState = !audioTrack.enabled;
+        setIsMuted(actualMuteState);
+        console.log('🎤 Retry - Initial mute state set:', actualMuteState);
+      }
+      
+      // Initialize video state based on actual track state (for retryCamera)
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const actualVideoOffState = !videoTrack.enabled;
+        setIsVideoOff(actualVideoOffState);
+        console.log('📹 Retry - Initial video state set:', actualVideoOffState);
+      }
+
       // Update participants with new stream
       if (isConnected) {
         setParticipants(prev => prev.map(p => 
@@ -134,25 +150,25 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         ));
         
         // Replace tracks in all peer connections
-        const videoTrack = stream.getVideoTracks()[0];
-        const audioTrack = stream.getAudioTracks()[0];
+        const newVideoTrack = stream.getVideoTracks()[0];
+        const newAudioTrack = stream.getAudioTracks()[0];
         
         peerConnectionsRef.current.forEach(async (peerConnection) => {
-          if (videoTrack) {
+          if (newVideoTrack) {
             const videoSender = peerConnection.getSenders().find(s => 
               s.track && s.track.kind === 'video'
             );
             if (videoSender) {
-              await videoSender.replaceTrack(videoTrack);
+              await videoSender.replaceTrack(newVideoTrack);
             }
           }
           
-          if (audioTrack) {
+          if (newAudioTrack) {
             const audioSender = peerConnection.getSenders().find(s => 
               s.track && s.track.kind === 'audio'
             );
             if (audioSender) {
-              await audioSender.replaceTrack(audioTrack);
+              await audioSender.replaceTrack(newAudioTrack);
             }
           }
         });
@@ -286,6 +302,20 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
       
       localStreamRef.current = stream;
       setLocalStream(stream);
+      
+      // Initialize mute state based on actual track state (reuse existing audioTrack)
+      if (audioTrack) {
+        const actualMuteState = !audioTrack.enabled;
+        setIsMuted(actualMuteState);
+        console.log('🎤 Initial mute state set:', actualMuteState);
+      }
+      
+      // Initialize video state based on actual track state (reuse existing videoTrack)
+      if (videoTrack) {
+        const actualVideoOffState = !videoTrack.enabled;
+        setIsVideoOff(actualVideoOffState);
+        console.log('📹 Initial video state set:', actualVideoOffState);
+      }
       
       console.log('✅ Camera setup completed successfully');
       
@@ -766,34 +796,47 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
   }, [roomId, userId, toast, sendSignalingMessage]);
 
   const toggleMute = useCallback(() => {
-    if (!shouldInitialize || !localStreamRef.current) return;
+    if (!shouldInitialize || !localStreamRef.current) {
+      console.log('⚠️ Cannot toggle mute - not initialized or no stream');
+      return;
+    }
     
     const audioTrack = localStreamRef.current.getAudioTracks()[0];
     if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      setIsMuted(!audioTrack.enabled);
+      const newMutedState = !audioTrack.enabled;
+      audioTrack.enabled = !newMutedState;
+      setIsMuted(newMutedState);
+      
+      console.log('🎤 Audio toggled:', {
+        enabled: audioTrack.enabled,
+        muted: newMutedState,
+        trackId: audioTrack.id,
+        readyState: audioTrack.readyState
+      });
       
       // Update local participant state
       setParticipants(prev => prev.map(p => 
-        p.id === userId ? { ...p, isMuted: !audioTrack.enabled } : p
+        p.id === userId ? { ...p, isMuted: newMutedState } : p
       ));
       
       // Try to update database (graceful failure)
       if (roomId && userId) {
         supabase
           .from('session_participants')
-          .update({ is_muted: !audioTrack.enabled })
+          .update({ is_muted: newMutedState })
           .eq('session_id', roomId)
           .eq('user_id', userId)
           .then(() => {
-            // Database updated successfully
+            console.log('✅ Mute state updated in database:', newMutedState);
           })
-          .catch(() => {
-            // Silently fail if database not available
+          .catch((error) => {
+            console.error('❌ Failed to update mute state in database:', error);
           });
       }
+    } else {
+      console.error('❌ No audio track found');
     }
-  }, [roomId, userId]);
+  }, [shouldInitialize, roomId, userId]);
 
   const toggleVideo = useCallback(async () => {
     if (!shouldInitialize || !localStreamRef.current) return;

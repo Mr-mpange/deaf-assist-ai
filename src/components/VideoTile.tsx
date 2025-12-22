@@ -61,6 +61,17 @@ export function VideoTile({
         video.playsInline = true;
         video.autoplay = true;
         
+        // Force video track to be enabled (fix for black screen)
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.enabled = true;
+          console.log('📹 Video track forced enabled for:', name, {
+            id: videoTrack.id,
+            enabled: videoTrack.enabled,
+            readyState: videoTrack.readyState
+          });
+        }
+        
         // Reset loading states
         setIsVideoLoading(true);
         setIsVideoPlaying(false);
@@ -109,6 +120,18 @@ export function VideoTile({
               } catch (retryError) {
                 console.error('Video play retry failed for', name, ':', retryError);
                 setIsVideoLoading(false);
+                
+                // Final attempt with video reload
+                setTimeout(async () => {
+                  try {
+                    video.load();
+                    await video.play();
+                    console.log('Video playing on final retry for:', name);
+                  } catch (finalError) {
+                    console.error('All video play attempts failed for', name, ':', finalError);
+                    setIsVideoLoading(false);
+                  }
+                }, 500);
               }
             }, 100);
           }
@@ -177,6 +200,13 @@ export function VideoTile({
                   console.error('Video error for', name, ':', e);
                 }}
               />
+              
+              {/* Debug info for development */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="absolute top-1 left-1 text-xs bg-black/50 text-white p-1 rounded">
+                  {stream.id.slice(0, 8)}
+                </div>
+              )}
               
               {/* Loading indicator - only show when actually loading */}
               {isVideoLoading && !isVideoPlaying && (
