@@ -4,28 +4,45 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GraduationCap, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { GraduationCap, Mail, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { loginSchema, LoginFormData } from '@/lib/validations';
+import { z } from 'zod';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setErrors({});
     
-    const success = await login(email, password);
-    if (success) {
-      navigate('/dashboard');
+    // Validate form data with zod
+    try {
+      const validatedData = loginSchema.parse({ email, password });
+      
+      setIsSubmitting(true);
+      const success = await login(validatedData.email, validatedData.password);
+      if (success) {
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors: Partial<Record<keyof LoginFormData, string>> = {};
+        error.errors.forEach((err) => {
+          if (err.path[0]) {
+            fieldErrors[err.path[0] as keyof LoginFormData] = err.message;
+          }
+        });
+        setErrors(fieldErrors);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    setIsSubmitting(false);
   };
-
 
   return (
     <div className="min-h-screen flex">
@@ -58,10 +75,16 @@ export default function Login() {
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
-                  required
+                  className={`pl-10 ${errors.email ? 'border-destructive' : ''}`}
+                  aria-invalid={!!errors.email}
                 />
               </div>
+              {errors.email && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.email}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -74,10 +97,16 @@ export default function Login() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
-                  required
+                  className={`pl-10 ${errors.password ? 'border-destructive' : ''}`}
+                  aria-invalid={!!errors.password}
                 />
               </div>
+              {errors.password && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.password}
+                </p>
+              )}
             </div>
 
             <Button 
@@ -97,7 +126,6 @@ export default function Login() {
               )}
             </Button>
           </form>
-
 
           <p className="text-center text-muted-foreground">
             Don't have an account?{' '}

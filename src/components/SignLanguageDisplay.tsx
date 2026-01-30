@@ -7,16 +7,46 @@ import {
   Play, 
   Pause, 
   RotateCcw,
-  Volume2,
-  Eye,
-  ArrowRight
+  Volume2
 } from 'lucide-react';
-import { SignDefinition, findSignsInText, getSignForWord } from '@/data/signLanguageDictionary';
+import { SignDefinition, findSignsInText } from '@/data/signLanguageDictionary';
 
 interface SignLanguageDisplayProps {
   text: string;
   autoPlay?: boolean;
   className?: string;
+}
+
+// Helper function to get appropriate emoji for sign
+function getHandEmoji(word: string): string {
+  const emojiMap: Record<string, string> = {
+    'hello': '👋',
+    'hi': '👋',
+    'goodbye': '👋',
+    'bye': '👋',
+    'please': '🙏',
+    'thank': '🙏',
+    'thanks': '🙏',
+    'you': '👉',
+    'me': '👈',
+    'what': '🤷',
+    'where': '🤔',
+    'when': '⏰',
+    'how': '❓',
+    'one': '☝️',
+    'two': '✌️',
+    'three': '🤟',
+    'four': '🖐️',
+    'five': '🖐️',
+    'a': '🖐️',
+    'b': '✊',
+    'c': '🤏',
+    'good': '👍',
+    'bad': '👎',
+    'yes': '👍',
+    'no': '👎',
+  };
+  return emojiMap[word.toLowerCase()] || '✋';
 }
 
 export function SignLanguageDisplay({ 
@@ -284,79 +314,47 @@ export function SignLanguageDisplay({
           </Button>
           
           <Button
-            variant="outline"✋';
-}ase()] || 'LowerCp[word.tomojiMa
-  return e
-   '👎'
-  };  'no':👍',
-      'yes': 'd': '👎',
-    'baod': '👍',
- 'go  ': '🤏',
- ',
-    'cb': '🖐️ '✊',
-    '   'a': '🖐️',
- five':️',
-    ': '🖐r',
-    'foue': '🤟' 'thre'✌️',
-      'two':  '☝️',
-    'one':: '❓',
-   'how''⏰',
-    'when': ': '🤔',
-  where '🤷',
-    'at':   'wh👈',
-     'me': 'ou': '👉',
-'y    k': '🙏',
-   'than,
- se': '🙏',
-    'plea: '👋'ye'
-    'b',goodbye': '👋👋',
-    '    'hi': '
-llo': '👋',
-    'heing> = {string, strp: Record<nst emojiMag {
-  coing): strinji(word: strtHandEmon geunctio
-fr signemoji foappropriate  to get ctionelper fun
-}
-
-// H>
-  );   </Cardtent>
-    </CardCon  )}
-   iv>
-           </d     v>
-      </di  }
-     ))            /Button>
-       <        gn.word}
-    {si                 >
-            }}
-                    alse);
- ying(fPla      setIs    
-          p(0);ntSte   setCurre             ;
-    ndex)Index(iSignCurrent  set                  => {
- ={()    onClick            m"
-  "ssize=                
-  "outline"} efault" :ndex ? "dentSignI === currdexariant={in           vx}
-       {inde        key=
-             <Button             dex) => (
-p((sign, ingns.ma {si    
-         2"> gap-lex-wrap="flex fiv className   <d        
- </p>ge:ssaigns in Medium">All Sm font-me"text-sclassName=     <p        >
-space-y-2"className="      <div     1 && (
-  >gns.length{si        */}
-review gns P Sill{/* A
-        
-</div>    
-    n>  </Butto        
-t →     Nex >
-             1}
-    - gthgns.len === sintSignIndexrresabled={cu     di     
-  xtSign}ck={ne   onCli
-          size="sm"        line"
-   riant="out va              <Button
-
+            variant="outline"
+            size="sm"
+            onClick={resetAnimation}
           >
-       utton </B
-           Reset        " />
-  4 mr-2 h-"w-4ssName=lateCcw c<Rota            
-   >on}
-       resetAnimatinClick={        o
-    ="sm"    size
-        
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reset
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={nextSign}
+            disabled={currentSignIndex === signs.length - 1}
+          >
+            Next →
+          </Button>
+        </div>
+
+        {/* All Signs Preview */}
+        {signs.length > 1 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-muted-foreground">All Signs in Message:</p>
+            <div className="flex flex-wrap gap-2">
+              {signs.map((sign, index) => (
+                <Button
+                  key={index}
+                  variant={index === currentSignIndex ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setCurrentSignIndex(index);
+                    setCurrentStep(0);
+                    setIsPlaying(false);
+                  }}
+                >
+                  {sign.word}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

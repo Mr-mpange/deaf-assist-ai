@@ -4,9 +4,10 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GraduationCap, Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { GraduationCap, Mail, Lock, User, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { registerSchema, RegisterFormData } from '@/lib/validations';
+import { z } from 'zod';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -14,19 +15,36 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<keyof RegisterFormData, string>>>({});
   const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setErrors({});
     
-    const success = await register(name, email, password, role);
-    if (success) {
-      navigate('/dashboard');
+    // Validate form data with zod
+    try {
+      const validatedData = registerSchema.parse({ name, email, password, role });
+      
+      setIsSubmitting(true);
+      const success = await register(validatedData.name, validatedData.email, validatedData.password, validatedData.role);
+      if (success) {
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors: Partial<Record<keyof RegisterFormData, string>> = {};
+        error.errors.forEach((err) => {
+          if (err.path[0]) {
+            fieldErrors[err.path[0] as keyof RegisterFormData] = err.message;
+          }
+        });
+        setErrors(fieldErrors);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    setIsSubmitting(false);
   };
 
   return (
@@ -99,6 +117,12 @@ export default function Register() {
                   <div className="text-sm text-muted-foreground">As an Instructor</div>
                 </button>
               </div>
+              {errors.role && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.role}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -111,10 +135,16 @@ export default function Register() {
                   placeholder="Enter your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="pl-10"
-                  required
+                  className={`pl-10 ${errors.name ? 'border-destructive' : ''}`}
+                  aria-invalid={!!errors.name}
                 />
               </div>
+              {errors.name && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.name}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -127,10 +157,16 @@ export default function Register() {
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
-                  required
+                  className={`pl-10 ${errors.email ? 'border-destructive' : ''}`}
+                  aria-invalid={!!errors.email}
                 />
               </div>
+              {errors.email && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.email}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -143,11 +179,19 @@ export default function Register() {
                   placeholder="Create a password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
-                  required
-                  minLength={6}
+                  className={`pl-10 ${errors.password ? 'border-destructive' : ''}`}
+                  aria-invalid={!!errors.password}
                 />
               </div>
+              {errors.password && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.password}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Must be 8+ characters with uppercase, lowercase, and a number
+              </p>
             </div>
 
             <Button 
