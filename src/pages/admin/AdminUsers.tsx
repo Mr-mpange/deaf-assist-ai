@@ -230,56 +230,39 @@ export default function AdminUsers() {
         throw new Error('No active session');
       }
 
-      // Try using RPC function first (bypasses RLS)
-      const { data: rpcResult, error: rpcError } = await supabase.rpc('admin_update_user_profile', {
-        target_user_id: editingUser.id,
-        new_name: editingUser.name,
-        new_role: editingUser.role
-      });
+      // Try direct update approach (bypasses RPC which may not exist)
+      // Update profile name
+      const { error: directProfileError } = await supabase
+        .from('profiles')
+        .update({ name: editingUser.name })
+        .eq('user_id', editingUser.id);
 
-      // RPC update completed result:', { rpcResult, rpcError });
+      if (directProfileError) {
+        throw new Error(`Profile update failed: ${directProfileError.message}`);
+      }
 
-      if (rpcError || (rpcResult && !rpcResult.success)) {
-        // RPC failed, trying direct update
-        
-        // Fallback: Try direct update (will work if RLS policies are set up)
-        const { error: directProfileError } = await supabase
-          .from('profiles')
-          .update({ name: editingUser.name })
-          .eq('user_id', editingUser.id);
+      // Update role: delete old role and insert new one
+      const { error: deleteError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', editingUser.id);
 
-        if (directProfileError) {
-          throw new Error(`Profile update failed: ${directProfileError.message}`);
-        }
+      if (deleteError) {
+        console.warn('Delete role error:', deleteError);
+      }
 
-        // Fallback: Try direct role update
-        const { error: deleteError } = await supabase
-          .from('user_roles')
-          .delete()
-          .eq('user_id', editingUser.id);
+      const { error: insertRoleError } = await supabase
+        .from('user_roles')
+        .insert({ 
+          user_id: editingUser.id, 
+          role: editingUser.role 
+        });
 
-        if (deleteError) {
-          console.warn('Delete role error:', deleteError);
-        }
-
-        const { error: roleError } = await supabase
-          .from('user_roles')
-          .insert({ 
-            user_id: editingUser.id, 
-            role: editingUser.role 
-          });
-
-        if (roleError) {
-          throw new Error(`Role update failed: ${roleError.message}. Please run the admin SQL policies in Supabase dashboard.`);
-        }
+      if (insertRoleError) {
+        throw new Error(`Role update failed: ${insertRoleError.message}. Please run the admin SQL policies in Supabase dashboard.`);
       }
 
       // Role update completed
-
-      if (roleError) {
-        console.error('Role update error:', roleError);
-        throw roleError;
-      }
 
       toast({
         title: "User Updated",

@@ -186,25 +186,26 @@ export function RaiseHandPanel({
     detect();
   }, [isCameraOn, isModelLoading, detectHands, isDetecting]);
 
-  // Broadcast detected signs to teacher in real-time
+  // Broadcast detected signs to teacher in real-time (store in student_responses)
   const broadcastSignToTeacher = useCallback(async (sign: string, confidence: number) => {
     if (!isCalledOn) return;
     
     try {
-      // Update the raised_hand record with current detection
+      // Insert sign detection into student_responses for real-time tracking
       await supabase
-        .from('raised_hands')
-        .update({
-          current_sign: sign,
-          current_confidence: confidence,
-          last_detected_at: new Date().toISOString(),
-        })
-        .eq('session_id', sessionId)
-        .eq('student_id', studentId);
+        .from('student_responses')
+        .insert({
+          session_id: sessionId,
+          student_id: studentId,
+          student_name: studentName,
+          detected_sign: sign,
+          confidence: confidence,
+          response_type: 'sign_detection',
+        });
     } catch (err) {
       console.error('Error broadcasting sign:', err);
     }
-  }, [isCalledOn, sessionId, studentId]);
+  }, [isCalledOn, sessionId, studentId, studentName]);
 
   useEffect(() => {
     if (!results?.landmarks || !canvasRef.current) return;

@@ -261,6 +261,50 @@ export type Database = {
           },
         ]
       }
+      session_participants: {
+        Row: {
+          id: string
+          is_active: boolean
+          is_muted: boolean
+          is_video_off: boolean
+          joined_at: string
+          left_at: string | null
+          session_id: string
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          id?: string
+          is_active?: boolean
+          is_muted?: boolean
+          is_video_off?: boolean
+          joined_at?: string
+          left_at?: string | null
+          session_id: string
+          user_id: string
+          user_name: string
+        }
+        Update: {
+          id?: string
+          is_active?: boolean
+          is_muted?: boolean
+          is_video_off?: boolean
+          joined_at?: string
+          left_at?: string | null
+          session_id?: string
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       session_recordings: {
         Row: {
           created_at: string
@@ -298,6 +342,91 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "session_recordings_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sign_messages: {
+        Row: {
+          confidence: number
+          created_at: string
+          id: string
+          participant_id: string
+          participant_name: string
+          session_id: string
+          sign_text: string
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          id?: string
+          participant_id: string
+          participant_name: string
+          session_id: string
+          sign_text: string
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          id?: string
+          participant_id?: string
+          participant_name?: string
+          session_id?: string
+          sign_text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sign_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_responses: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          detected_sign: string | null
+          id: string
+          is_featured: boolean
+          response_content: string | null
+          response_type: string
+          session_id: string
+          student_id: string
+          student_name: string
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          detected_sign?: string | null
+          id?: string
+          is_featured?: boolean
+          response_content?: string | null
+          response_type?: string
+          session_id: string
+          student_id: string
+          student_name: string
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          detected_sign?: string | null
+          id?: string
+          is_featured?: boolean
+          response_content?: string | null
+          response_type?: string
+          session_id?: string
+          student_id?: string
+          student_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_responses_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "live_sessions"
@@ -345,6 +474,44 @@ export type Database = {
             columns: ["lesson_id"]
             isOneToOne: false
             referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teacher_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          message_type: string
+          session_id: string
+          target_student_id: string | null
+          teacher_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          message_type?: string
+          session_id: string
+          target_student_id?: string | null
+          teacher_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          message_type?: string
+          session_id?: string
+          target_student_id?: string | null
+          teacher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teacher_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "live_sessions"
             referencedColumns: ["id"]
           },
         ]

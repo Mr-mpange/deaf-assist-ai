@@ -9,6 +9,8 @@ interface Lesson {
   video_url?: string;
   created_at: string;
   author_id: string;
+  views?: number;
+  authorName?: string;
 }
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
