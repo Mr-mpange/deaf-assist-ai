@@ -94,13 +94,13 @@ export default function LessonDetail() {
       if (user) {
         const { data: progressData } = await supabase
           .from('lesson_progress')
-          .select('progress_percentage, completed')
+          .select('progress_percent, completed')
           .eq('user_id', user.id)
           .eq('lesson_id', lessonId)
           .maybeSingle();
 
         if (progressData) {
-          setProgress(progressData.progress_percentage || 0);
+          setProgress(progressData.progress_percent || 0);
           setIsCompleted(progressData.completed || false);
         }
       }
@@ -122,9 +122,9 @@ export default function LessonDetail() {
         .upsert({
           user_id: user.id,
           lesson_id: id,
-          progress_percentage: progressPercentage,
+          progress_percent: progressPercentage,
           completed: completed,
-          last_accessed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         }, {
           onConflict: 'user_id,lesson_id'
         });

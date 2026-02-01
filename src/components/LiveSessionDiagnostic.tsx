@@ -113,30 +113,16 @@ export function LiveSessionDiagnostic({ sessionId, userId, isHost }: LiveSession
   };
 
   const fixSignDetection = async () => {
-    try {
-      // Try to create the sign_messages table if it doesn't exist
-      const { error } = await supabase.rpc('exec', {
-        sql: `
-          CREATE TABLE IF NOT EXISTS sign_messages (
-            id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-            session_id UUID NOT NULL,
-            participant_id UUID NOT NULL,
-            participant_name TEXT NOT NULL,
-            sign_text TEXT NOT NULL,
-            confidence DECIMAL(3,2) NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-        `
-      });
+    // Tables are now created via migrations - this button just re-runs diagnostics
+    toast({
+      title: "Tables Configured",
+      description: "Sign detection tables are set up via database migrations. Run diagnostics to verify.",
+    });
+    runDiagnostics();
+  };
 
-      if (error) {
-        alert(`Could not create table: ${error.message}`);
-      } else {
-        alert('Sign detection table created! Run diagnostics again.');
-      }
-    } catch (error) {
-      alert('Failed to fix sign detection. Please run the SQL setup manually.');
-    }
+  const toast = (params: { title: string; description: string }) => {
+    alert(`${params.title}: ${params.description}`);
   };
 
   const getStatusIcon = (status: string) => {

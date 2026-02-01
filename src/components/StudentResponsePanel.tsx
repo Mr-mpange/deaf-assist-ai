@@ -226,8 +226,9 @@ export function StudentResponsePanel({
           session_id: sessionId,
           student_id: studentId,
           student_name: studentName,
-          sign: sign,
+          detected_sign: sign,
           confidence: confidence,
+          response_type: 'answer',
         });
 
       setHasResponded(true);

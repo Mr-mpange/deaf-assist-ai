@@ -157,7 +157,8 @@ export function TeacherCommunicationPanel({
       .from('teacher_messages')
       .insert({
         session_id: sessionId,
-        message: text.trim(),
+        teacher_id: (await supabase.auth.getUser()).data.user?.id,
+        content: text.trim(),
         message_type: type,
       });
 

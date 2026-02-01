@@ -653,8 +653,7 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
           .upsert({
             session_id: roomId,
             user_id: userId,
-            name: userName,
-            is_host: isHost,
+            user_name: userName,
             is_muted: false,
             is_video_off: false,
             joined_at: new Date().toISOString(),
@@ -826,11 +825,12 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
           .update({ is_muted: newMutedState })
           .eq('session_id', roomId)
           .eq('user_id', userId)
-          .then(() => {
-            console.log('✅ Mute state updated in database:', newMutedState);
-          })
-          .catch((error) => {
-            console.error('❌ Failed to update mute state in database:', error);
+          .then((result) => {
+            if (!result.error) {
+              console.log('✅ Mute state updated in database:', newMutedState);
+            } else {
+              console.error('❌ Failed to update mute state:', result.error);
+            }
           });
       }
     } else {
@@ -948,11 +948,10 @@ export function useWebRTC({ roomId, userId, userName, isHost }: UseWebRTCOptions
         .update({ is_video_off: willTurnOff })
         .eq('session_id', roomId)
         .eq('user_id', userId)
-        .then(() => {
-          // Database updated successfully
-        })
-        .catch(() => {
-          // Silently fail if database not available
+        .then((result) => {
+          if (!result.error) {
+            // Database updated successfully
+          }
         });
     }
   }, [roomId, userId, isVideoOff, toast]);

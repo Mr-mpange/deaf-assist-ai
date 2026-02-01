@@ -116,7 +116,7 @@ export default function TeacherSubmissions() {
       }
 
       // Transform the data to match our interface
-      const transformedSubmissions: Submission[] = submissionsData?.map(sub => ({
+      const transformedSubmissions: Submission[] = submissionsData?.map((sub: any) => ({
         id: sub.id,
         student_id: sub.student_id,
         lesson_id: sub.lesson_id,
@@ -125,8 +125,8 @@ export default function TeacherSubmissions() {
         feedback: sub.feedback,
         submitted_at: sub.submitted_at,
         reviewed_at: sub.reviewed_at,
-        student_name: (sub.profiles as any)?.name || 'Unknown Student',
-        lesson_title: (sub.lessons as any)?.title || 'Unknown Lesson'
+        student_name: sub.profiles?.name || 'Unknown Student',
+        lesson_title: sub.lessons?.title || 'Unknown Lesson'
       })) || [];
 
       setSubmissions(transformedSubmissions);

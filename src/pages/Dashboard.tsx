@@ -32,6 +32,9 @@ interface Lesson {
   duration: number;
   thumbnail_url?: string;
   created_at: string;
+  author_id: string;
+  views?: number;
+  authorName?: string;
 }
 
 interface LiveSession {
@@ -218,7 +221,7 @@ function StudentDashboard() {
               <CardContent>
                 <p className="font-medium">{upcomingSession.title}</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  with {upcomingSession.hostName}
+                  with {upcomingSession.host_name || 'Instructor'}
                 </p>
                 <Link to="/live">
                   <Button size="sm" className="w-full">

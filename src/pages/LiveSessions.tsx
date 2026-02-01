@@ -54,6 +54,7 @@ interface LiveSession {
   status: string;
   scheduled_at: string;
   participants_count: number;
+  created_at?: string;
 }
 
 export default function LiveSessions() {
@@ -513,17 +514,8 @@ export default function LiveSessions() {
         
         // If we get the recursion error, try a different approach
         if (error.code === '42P17' || error.message.includes('infinite recursion')) {
-          // Trying alternative approach due to RLS recursion
-          
-          // Use RPC call to bypass RLS
-          const { error: rpcError } = await supabase.rpc('end_session_manual', {
-            session_id: sessionId,
-            user_id: user?.id
-          });
-          
-          if (rpcError) {
-            throw new Error('Could not end session due to database policy issues. Please contact support.');
-          }
+          // RLS recursion issue - just throw a user-friendly error
+          throw new Error('Could not end session due to database policy issues. Please try refreshing the page.');
         } else {
           throw error;
         }
@@ -748,7 +740,7 @@ export default function LiveSessions() {
               {isHost && (
                 <TeacherCommunicationPanel
                   sessionId={activeSession.id}
-                  onStudentResponse={handleAnswerSubmitted}
+                  onStudentResponse={(response) => handleAnswerSubmitted(response.sign, response.confidence)}
                 />
               )}
 
