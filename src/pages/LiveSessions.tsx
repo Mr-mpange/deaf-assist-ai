@@ -42,6 +42,9 @@ import { StudentResponsePanel } from '@/components/StudentResponsePanel';
 import { FullscreenVideoModal } from '@/components/FullscreenVideoModal';
 import { StudentCameraFix } from '@/components/StudentCameraFix';
 import { WebRTCDebugInfo } from '@/components/WebRTCDebugInfo';
+import { EmojiReactionPanel } from '@/components/EmojiReactionPanel';
+import { SessionChatPanel } from '@/components/SessionChatPanel';
+import { FeaturedStudentSpotlight } from '@/components/FeaturedStudentSpotlight';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -775,6 +778,25 @@ export default function LiveSessions() {
                 />
               )}
 
+              {/* Emoji Reactions - for everyone */}
+              {user && profile && (
+                <EmojiReactionPanel
+                  sessionId={activeSession.id}
+                  participantId={user.id}
+                  participantName={profile.name}
+                />
+              )}
+
+              {/* Session Chat - for everyone */}
+              {user && profile && (
+                <SessionChatPanel
+                  sessionId={activeSession.id}
+                  participantId={user.id}
+                  participantName={profile.name}
+                  isHost={isHost}
+                />
+              )}
+
               {/* Participants List */}
               <Card className="border-border/50 shadow-card">
                 <CardHeader className="pb-2">
@@ -813,6 +835,14 @@ export default function LiveSessions() {
               />
             </div>
           </div>
+
+          {/* Featured Student Spotlight */}
+          <FeaturedStudentSpotlight
+            sessionId={activeSession.id}
+            isHost={isHost}
+            participants={participants}
+            onDismiss={() => setCalledStudentId(null)}
+          />
 
           {/* Fullscreen Video Modal */}
           <FullscreenVideoModal
