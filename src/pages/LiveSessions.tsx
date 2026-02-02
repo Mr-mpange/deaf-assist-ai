@@ -45,6 +45,10 @@ import { WebRTCDebugInfo } from '@/components/WebRTCDebugInfo';
 import { EmojiReactionPanel } from '@/components/EmojiReactionPanel';
 import { SessionChatPanel } from '@/components/SessionChatPanel';
 import { FeaturedStudentSpotlight } from '@/components/FeaturedStudentSpotlight';
+import { FloatingEmojiOverlay } from '@/components/FloatingEmojiOverlay';
+import { TeacherAnnouncementPanel } from '@/components/TeacherAnnouncementPanel';
+import { StudentAnnouncementListener } from '@/components/StudentAnnouncementListener';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -126,7 +130,7 @@ export default function LiveSessions() {
     retryCamera,
   } = useWebRTC(webRTCConfig);
 
-  // Cancel auto-timeout when participants join
+  const { playCalledSound, playJoinSound } = useNotificationSound();
   useEffect(() => {
     if (participants.length > 1 && autoTimeoutId && isHost) {
       console.log('✅ Participants joined - canceling auto-timeout');
@@ -200,6 +204,7 @@ export default function LiveSessions() {
           const newData = payload.new as any;
           if (newData.student_id === user?.id && newData.status === 'called') {
             setCalledStudentId(user?.id || null);
+            playCalledSound(); // Play notification sound
             toast({
               title: "You've been called on!",
               description: "Show your answer using sign language",
@@ -595,6 +600,14 @@ export default function LiveSessions() {
   if (activeSession && isConnected) {
     return (
       <DashboardLayout>
+        {/* Floating Emoji Overlay - visible to all */}
+        <FloatingEmojiOverlay sessionId={activeSession.id} />
+
+        {/* Student Announcement Listener */}
+        {!isHost && (
+          <StudentAnnouncementListener sessionId={activeSession.id} />
+        )}
+
         <div className="space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -762,6 +775,14 @@ export default function LiveSessions() {
                 <TeacherRaisedHandsPanel
                   sessionId={activeSession.id}
                   onCallStudent={handleCallStudent}
+                />
+              )}
+
+              {/* Teacher: Announcement Panel */}
+              {isHost && user && (
+                <TeacherAnnouncementPanel
+                  sessionId={activeSession.id}
+                  teacherId={user.id}
                 />
               )}
 
