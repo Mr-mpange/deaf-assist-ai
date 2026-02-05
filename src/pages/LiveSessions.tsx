@@ -49,6 +49,9 @@ import { FloatingEmojiOverlay } from '@/components/FloatingEmojiOverlay';
 import { TeacherAnnouncementPanel } from '@/components/TeacherAnnouncementPanel';
 import { StudentAnnouncementListener } from '@/components/StudentAnnouncementListener';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
+import { SessionPollPanel } from '@/components/SessionPollPanel';
+import { SessionTimerPanel } from '@/components/SessionTimerPanel';
+import { SessionAttendancePanel } from '@/components/SessionAttendancePanel';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -628,8 +631,8 @@ export default function LiveSessions() {
               {/* Video Grid */}
               <div className="space-y-4">
                 {participants.length > 1 && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                    <p className="text-sm text-green-800">
+                  <div className="bg-success/10 border border-success/30 rounded-lg p-3">
+                    <p className="text-sm text-success">
                       <strong>{participants.length} participants</strong> connected with live video and audio!
                     </p>
                   </div>
@@ -796,6 +799,31 @@ export default function LiveSessions() {
                   onAnswerSubmitted={handleAnswerSubmitted}
                   onLowerHand={() => setCalledStudentId(null)}
                   liveStream={localStream}
+                />
+              )}
+
+              {/* Poll/Quiz Panel - for everyone */}
+              {user && profile && (
+                <SessionPollPanel
+                  sessionId={activeSession.id}
+                  participantId={user.id}
+                  participantName={profile.name}
+                  isHost={isHost}
+                />
+              )}
+
+              {/* Timer Panel - for everyone */}
+              <SessionTimerPanel
+                sessionId={activeSession.id}
+                isHost={isHost}
+              />
+
+              {/* Attendance Panel - host only */}
+              {isHost && (
+                <SessionAttendancePanel
+                  sessionId={activeSession.id}
+                  sessionTitle={activeSession.title}
+                  isHost={isHost}
                 />
               )}
 
