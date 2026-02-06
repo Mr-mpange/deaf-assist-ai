@@ -52,6 +52,9 @@ import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { SessionPollPanel } from '@/components/SessionPollPanel';
 import { SessionTimerPanel } from '@/components/SessionTimerPanel';
 import { SessionAttendancePanel } from '@/components/SessionAttendancePanel';
+import { SessionWhiteboard } from '@/components/SessionWhiteboard';
+import { BreakoutRoomsPanel } from '@/components/BreakoutRoomsPanel';
+import { SessionNotesPanel } from '@/components/SessionNotesPanel';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -839,6 +842,36 @@ export default function LiveSessions() {
               {/* Session Chat - for everyone */}
               {user && profile && (
                 <SessionChatPanel
+                  sessionId={activeSession.id}
+                  participantId={user.id}
+                  participantName={profile.name}
+                  isHost={isHost}
+                />
+              )}
+
+              {/* Whiteboard - for everyone */}
+              {user && profile && (
+                <SessionWhiteboard
+                  sessionId={activeSession.id}
+                  isHost={isHost}
+                  participantName={profile.name}
+                />
+              )}
+
+              {/* Breakout Rooms - for everyone */}
+              {user && profile && (
+                <BreakoutRoomsPanel
+                  sessionId={activeSession.id}
+                  participantId={user.id}
+                  participantName={profile.name}
+                  isHost={isHost}
+                  allParticipants={participants.map(p => ({ id: p.id, name: p.name }))}
+                />
+              )}
+
+              {/* Session Notes - for everyone */}
+              {user && profile && (
+                <SessionNotesPanel
                   sessionId={activeSession.id}
                   participantId={user.id}
                   participantName={profile.name}
