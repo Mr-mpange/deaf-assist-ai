@@ -29,7 +29,8 @@ import {
   MonitorOff,
   PhoneOff,
   Circle,
-  StopCircle
+  StopCircle,
+  BarChart3
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useWebRTC } from '@/hooks/useWebRTC';
@@ -55,6 +56,7 @@ import { SessionAttendancePanel } from '@/components/SessionAttendancePanel';
 import { SessionWhiteboard } from '@/components/SessionWhiteboard';
 import { BreakoutRoomsPanel } from '@/components/BreakoutRoomsPanel';
 import { SessionNotesPanel } from '@/components/SessionNotesPanel';
+import { SessionAnalytics } from '@/components/SessionAnalytics';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -95,6 +97,8 @@ export default function LiveSessions() {
   const [fullscreenParticipant, setFullscreenParticipant] = useState<any | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [autoTimeoutId, setAutoTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const [recentEndedSessions, setRecentEndedSessions] = useState<LiveSession[]>([]);
+  const [analyticsSessionId, setAnalyticsSessionId] = useState<string | null>(null);
   
   const isTeacher = role === 'teacher' || role === 'admin';
   const isHost = activeSession?.host_id === user?.id;
@@ -298,6 +302,23 @@ export default function LiveSessions() {
       if (upcomingData) {
         const upcomingSessionsWithHosts = await addHostNames(upcomingData);
         setUpcomingSessions(upcomingSessionsWithHosts);
+      }
+
+      // Fetch recent ended sessions (last 7 days) for analytics
+      if (isTeacher) {
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: endedData } = await supabase
+          .from('live_sessions')
+          .select('*')
+          .eq('status', 'ended')
+          .eq('host_id', user?.id || '')
+          .gte('created_at', weekAgo)
+          .order('ended_at', { ascending: false })
+          .limit(5);
+
+        if (endedData) {
+          setRecentEndedSessions(endedData);
+        }
       }
 
     } catch (error) {
@@ -812,6 +833,7 @@ export default function LiveSessions() {
                   participantId={user.id}
                   participantName={profile.name}
                   isHost={isHost}
+                  enableSignDetection={!isHost}
                 />
               )}
 
@@ -1135,6 +1157,44 @@ export default function LiveSessions() {
             </Card>
           )}
         </div>
+
+        {/* Session Analytics */}
+        {isTeacher && recentEndedSessions.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-muted-foreground" />
+              Recent Session Analytics
+            </h2>
+            {analyticsSessionId ? (
+              <div className="space-y-2">
+                <Button variant="ghost" size="sm" onClick={() => setAnalyticsSessionId(null)}>
+                  ← Back to list
+                </Button>
+                <SessionAnalytics
+                  sessionId={analyticsSessionId}
+                  sessionTitle={recentEndedSessions.find(s => s.id === analyticsSessionId)?.title || ''}
+                />
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {recentEndedSessions.map((session) => (
+                  <Card
+                    key={session.id}
+                    className="border-border/50 shadow-card cursor-pointer hover:border-primary/30 transition-colors"
+                    onClick={() => setAnalyticsSessionId(session.id)}
+                  >
+                    <CardContent className="p-4">
+                      <h4 className="font-medium truncate">{session.title}</h4>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(session.scheduled_at).toLocaleDateString()} • Click to view analytics
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Past Recordings */}
         <SessionRecordings />
