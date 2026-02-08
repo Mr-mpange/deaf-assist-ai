@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { BarChart3, Plus, X, Send, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { PollSignDetection } from '@/components/PollSignDetection';
 
 interface PollOption {
   id: string;
@@ -29,13 +30,15 @@ interface SessionPollPanelProps {
   participantId: string;
   participantName: string;
   isHost: boolean;
+  enableSignDetection?: boolean;
 }
 
 export function SessionPollPanel({ 
   sessionId, 
   participantId, 
   participantName, 
-  isHost 
+  isHost,
+  enableSignDetection = false,
 }: SessionPollPanelProps) {
   const { toast } = useToast();
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
@@ -361,6 +364,21 @@ export function SessionPollPanel({
               >
                 Submit Vote
               </Button>
+
+              {/* Sign Language Detection for voting */}
+              {enableSignDetection && activePoll && (
+                <PollSignDetection
+                  pollOptions={activePoll.options}
+                  onSignDetected={(optionId) => {
+                    setSelectedOption(optionId);
+                    // Auto-submit after sign detection
+                    setTimeout(() => {
+                      if (activePoll) submitVote();
+                    }, 300);
+                  }}
+                  disabled={hasVoted}
+                />
+              )}
             </>
           )}
         </CardContent>
