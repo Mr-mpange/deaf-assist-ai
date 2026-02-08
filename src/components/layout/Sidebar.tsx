@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
+  Trophy,
 } from 'lucide-react';
 
 interface NavItem {
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { label: 'Lessons', icon: BookOpen, href: '/lessons', roles: ['student', 'teacher', 'admin'] },
   { label: 'Practice', icon: Camera, href: '/practice', roles: ['student', 'teacher', 'admin'] },
   { label: 'Live Sessions', icon: Radio, href: '/live', roles: ['student', 'teacher', 'admin'] },
+  { label: 'Leaderboard', icon: Trophy, href: '/leaderboard', roles: ['student', 'teacher', 'admin'] },
   { label: 'My Uploads', icon: Upload, href: '/uploads', roles: ['teacher', 'admin'] },
   { label: 'Submissions', icon: Video, href: '/submissions', roles: ['teacher', 'admin'] },
   { label: 'Users', icon: Users, href: '/admin/users', roles: ['admin'] },

@@ -20,6 +20,7 @@ import TeacherSubmissions from "./pages/TeacherSubmissions";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import NotFound from "./pages/NotFound";
+import Leaderboard from "./pages/Leaderboard";
 
 const queryClient = new QueryClient();
 
@@ -106,6 +107,7 @@ function AppRoutes() {
       <Route path="/lessons/:id" element={<ProtectedRoute><LessonDetail /></ProtectedRoute>} />
       <Route path="/practice" element={<ProtectedRoute><Practice /></ProtectedRoute>} />
       <Route path="/live" element={<ProtectedRoute><LiveSessions /></ProtectedRoute>} />
+      <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
       
       {/* Teacher Routes */}
       <Route path="/uploads" element={
