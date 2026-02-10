@@ -24,6 +24,7 @@ import NotFound from "./pages/NotFound";
 import Leaderboard from "./pages/Leaderboard";
 import Profile from "./pages/Profile";
 import ProgressDashboard from "./pages/ProgressDashboard";
+import Dictionary from "./pages/Dictionary";
 
 const queryClient = new QueryClient();
 
@@ -113,6 +114,7 @@ function AppRoutes() {
       <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/progress" element={<ProtectedRoute><ProgressDashboard /></ProtectedRoute>} />
+      <Route path="/dictionary" element={<ProtectedRoute><Dictionary /></ProtectedRoute>} />
       
       {/* Teacher Routes */}
       <Route path="/uploads" element={
