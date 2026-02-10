@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { SidebarProvider } from "@/context/SidebarContext";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 // Pages
 import Landing from "./pages/Landing";
@@ -22,6 +23,7 @@ import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import NotFound from "./pages/NotFound";
 import Leaderboard from "./pages/Leaderboard";
 import Profile from "./pages/Profile";
+import ProgressDashboard from "./pages/ProgressDashboard";
 
 const queryClient = new QueryClient();
 
@@ -110,6 +112,7 @@ function AppRoutes() {
       <Route path="/live" element={<ProtectedRoute><LiveSessions /></ProtectedRoute>} />
       <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+      <Route path="/progress" element={<ProtectedRoute><ProgressDashboard /></ProtectedRoute>} />
       
       {/* Teacher Routes */}
       <Route path="/uploads" element={
@@ -142,19 +145,21 @@ function AppRoutes() {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <SidebarProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </TooltipProvider>
-      </SidebarProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+  <ThemeProvider defaultTheme="system" storageKey="deaflearn-theme">
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <SidebarProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </TooltipProvider>
+        </SidebarProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;

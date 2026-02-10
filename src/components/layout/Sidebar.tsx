@@ -16,10 +16,13 @@ import {
   GraduationCap,
   ChevronLeft,
   ChevronRight,
-  MessageSquare,
   Trophy,
   User,
+  Sun,
+  Moon,
+  LineChart,
 } from 'lucide-react';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface NavItem {
   label: string;
@@ -35,6 +38,7 @@ const navItems: NavItem[] = [
   { label: 'Practice', icon: Camera, href: '/practice', roles: ['student', 'teacher', 'admin'] },
   { label: 'Live Sessions', icon: Radio, href: '/live', roles: ['student', 'teacher', 'admin'] },
   { label: 'Leaderboard', icon: Trophy, href: '/leaderboard', roles: ['student', 'teacher', 'admin'] },
+  { label: 'Progress', icon: LineChart, href: '/progress', roles: ['student', 'teacher', 'admin'] },
   { label: 'My Uploads', icon: Upload, href: '/uploads', roles: ['teacher', 'admin'] },
   { label: 'Submissions', icon: Video, href: '/submissions', roles: ['teacher', 'admin'] },
   { label: 'Users', icon: Users, href: '/admin/users', roles: ['admin'] },
@@ -45,6 +49,7 @@ export function Sidebar() {
   const { user, profile, role, logout } = useAuth();
   const location = useLocation();
   const { collapsed, toggleCollapsed } = useSidebar();
+  const { theme, setTheme } = useTheme();
 
   if (!user) return null;
 
@@ -159,6 +164,17 @@ export function Sidebar() {
 
       {/* Bottom Actions */}
       <div className="px-3 py-4 border-t border-sidebar-border space-y-2">
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent/50",
+            collapsed ? "justify-center px-0" : ""
+          )}
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        >
+          {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          {!collapsed && <span className="ml-3">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+        </Button>
         <Button
           variant="ghost"
           className={cn(
