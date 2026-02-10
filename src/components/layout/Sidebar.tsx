@@ -39,6 +39,7 @@ const navItems: NavItem[] = [
   { label: 'Live Sessions', icon: Radio, href: '/live', roles: ['student', 'teacher', 'admin'] },
   { label: 'Leaderboard', icon: Trophy, href: '/leaderboard', roles: ['student', 'teacher', 'admin'] },
   { label: 'Progress', icon: LineChart, href: '/progress', roles: ['student', 'teacher', 'admin'] },
+  { label: 'Dictionary', icon: BookOpen, href: '/dictionary', roles: ['student', 'teacher', 'admin'] },
   { label: 'My Uploads', icon: Upload, href: '/uploads', roles: ['teacher', 'admin'] },
   { label: 'Submissions', icon: Video, href: '/submissions', roles: ['teacher', 'admin'] },
   { label: 'Users', icon: Users, href: '/admin/users', roles: ['admin'] },
