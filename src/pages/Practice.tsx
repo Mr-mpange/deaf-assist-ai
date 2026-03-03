@@ -15,7 +15,9 @@ import {
   MessageSquare,
   Bot,
   Target,
-  TrendingUp
+  TrendingUp,
+  Swords,
+  Brain
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -27,6 +29,8 @@ import { DetectionQualityIndicator } from '@/components/DetectionQualityIndicato
 import { PracticeQuizMode } from '@/components/PracticeQuizMode';
 import { GestureHistoryChart, addDetectionToHistory } from '@/components/GestureHistoryChart';
 import { classifyWithSmoothing, getDetectionQuality, resetClassifier } from '@/lib/signClassifier';
+import { MultiplayerQuizMode } from '@/components/MultiplayerQuizMode';
+import { SpacedRepetitionDashboard } from '@/components/SpacedRepetitionDashboard';
 
 export default function Practice() {
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -200,26 +204,34 @@ export default function Practice() {
         )}
 
         <Tabs defaultValue="practice" className="w-full">
-          <TabsList className="grid w-full max-w-2xl grid-cols-5">
-            <TabsTrigger value="practice" className="flex items-center gap-2">
+          <TabsList className="grid w-full max-w-3xl grid-cols-7">
+            <TabsTrigger value="practice" className="flex items-center gap-1.5">
               <Hand className="w-4 h-4" />
-              Practice
+              <span className="hidden sm:inline">Practice</span>
             </TabsTrigger>
-            <TabsTrigger value="quiz" className="flex items-center gap-2">
+            <TabsTrigger value="quiz" className="flex items-center gap-1.5">
               <Target className="w-4 h-4" />
-              Quiz
+              <span className="hidden sm:inline">Quiz</span>
             </TabsTrigger>
-            <TabsTrigger value="communicate" className="flex items-center gap-2">
+            <TabsTrigger value="multiplayer" className="flex items-center gap-1.5">
+              <Swords className="w-4 h-4" />
+              <span className="hidden sm:inline">1v1</span>
+            </TabsTrigger>
+            <TabsTrigger value="communicate" className="flex items-center gap-1.5">
               <MessageSquare className="w-4 h-4" />
-              Communicate
+              <span className="hidden sm:inline">Communicate</span>
             </TabsTrigger>
-            <TabsTrigger value="tutor" className="flex items-center gap-2">
+            <TabsTrigger value="tutor" className="flex items-center gap-1.5">
               <Bot className="w-4 h-4" />
-              AI Tutor
+              <span className="hidden sm:inline">AI Tutor</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2">
+            <TabsTrigger value="srs" className="flex items-center gap-1.5">
+              <Brain className="w-4 h-4" />
+              <span className="hidden sm:inline">SRS</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-1.5">
               <TrendingUp className="w-4 h-4" />
-              History
+              <span className="hidden sm:inline">History</span>
             </TabsTrigger>
           </TabsList>
 
@@ -453,6 +465,54 @@ export default function Practice() {
               <div className="space-y-4">
                 <GestureHistoryChart />
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="multiplayer" className="mt-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <MultiplayerQuizMode />
+              <Card className="border-border/50 shadow-card">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Swords className="w-5 h-5 text-primary" />
+                    How Multiplayer Works
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <p className="text-muted-foreground">Compete head-to-head with another student in real-time!</p>
+                  <div className="space-y-2">
+                    <div className="flex gap-2"><span>1️⃣</span><span>Create a room or join with a code</span></div>
+                    <div className="flex gap-2"><span>2️⃣</span><span>Both players see the same target signs</span></div>
+                    <div className="flex gap-2"><span>3️⃣</span><span>Sign each target before the timer runs out</span></div>
+                    <div className="flex gap-2"><span>🏆</span><span>Most correct signs + fastest time wins!</span></div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="srs" className="mt-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <SpacedRepetitionDashboard />
+              <Card className="border-border/50 shadow-card">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Brain className="w-5 h-5 text-primary" />
+                    Spaced Repetition
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <p className="text-muted-foreground">
+                    The spaced repetition system tracks which signs you struggle with and schedules reviews at optimal intervals.
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex gap-2"><span>🧠</span><span>Signs you miss appear more frequently</span></div>
+                    <div className="flex gap-2"><span>⏰</span><span>Review intervals grow as you master signs</span></div>
+                    <div className="flex gap-2"><span>📊</span><span>Track accuracy and streaks per sign</span></div>
+                    <div className="flex gap-2"><span>🎯</span><span>Enable "Smart Review" in Quiz mode to use SRS</span></div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
