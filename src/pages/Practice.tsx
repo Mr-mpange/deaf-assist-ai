@@ -13,7 +13,9 @@ import {
   Hand,
   Loader2,
   MessageSquare,
-  Bot
+  Bot,
+  Target,
+  TrendingUp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +24,8 @@ import { useHandDetection, classifySign } from '@/hooks/useHandDetection';
 import { SignToCommunicate } from '@/components/SignToCommunicate';
 import { AITutorChat } from '@/components/AITutorChat';
 import { DetectionQualityIndicator } from '@/components/DetectionQualityIndicator';
+import { PracticeQuizMode } from '@/components/PracticeQuizMode';
+import { GestureHistoryChart, addDetectionToHistory } from '@/components/GestureHistoryChart';
 import { classifyWithSmoothing, getDetectionQuality, resetClassifier } from '@/lib/signClassifier';
 
 export default function Practice() {
@@ -145,6 +149,7 @@ export default function Practice() {
     const smoothed = classifyWithSmoothing(results.landmarks, classifySign);
     if (smoothed && smoothed.sign !== 'DETECTING...') {
       setPrediction(smoothed);
+      addDetectionToHistory(smoothed.sign, smoothed.confidence);
       
       const existingIndex = signsDetected.findIndex(s => s.sign === smoothed.sign);
       if (existingIndex === -1) {
@@ -195,10 +200,14 @@ export default function Practice() {
         )}
 
         <Tabs defaultValue="practice" className="w-full">
-          <TabsList className="grid w-full max-w-lg grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl grid-cols-5">
             <TabsTrigger value="practice" className="flex items-center gap-2">
               <Hand className="w-4 h-4" />
               Practice
+            </TabsTrigger>
+            <TabsTrigger value="quiz" className="flex items-center gap-2">
+              <Target className="w-4 h-4" />
+              Quiz
             </TabsTrigger>
             <TabsTrigger value="communicate" className="flex items-center gap-2">
               <MessageSquare className="w-4 h-4" />
@@ -207,6 +216,10 @@ export default function Practice() {
             <TabsTrigger value="tutor" className="flex items-center gap-2">
               <Bot className="w-4 h-4" />
               AI Tutor
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              History
             </TabsTrigger>
           </TabsList>
 
@@ -432,6 +445,19 @@ export default function Practice() {
                 </Card>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="quiz" className="mt-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <PracticeQuizMode />
+              <div className="space-y-4">
+                <GestureHistoryChart />
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-6">
+            <GestureHistoryChart className="max-w-3xl" />
           </TabsContent>
         </Tabs>
       </div>
