@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { useHandDetection, classifySign } from '@/hooks/useHandDetection';
 import { classifyWithSmoothing, resetClassifier } from '@/lib/signClassifier';
 import { useToast } from '@/hooks/use-toast';
+import { recordResult, getReviewQueue } from '@/lib/spacedRepetition';
 
 const QUIZ_SIGNS = {
   alphabet: ['A','B','C','D','E','F','G','H','I','K','L','O','R','S','U','V','W','X','Y'],
@@ -87,13 +88,21 @@ export function PracticeQuizMode({ className = '' }: { className?: string }) {
     setIsCameraOn(false);
   };
 
+  const [useSRS, setUseSRS] = useState(true);
+
   const generateQuiz = useCallback(() => {
     const config = DIFFICULTY_CONFIG[difficulty];
     const pool: string[] = [];
     config.categories.forEach(cat => pool.push(...QUIZ_SIGNS[cat]));
+
+    if (useSRS) {
+      // Use spaced repetition to prioritize struggling signs
+      return getReviewQueue(pool, config.signCount);
+    }
+
     const shuffled = pool.sort(() => Math.random() - 0.5);
     return shuffled.slice(0, config.signCount);
-  }, [difficulty]);
+  }, [difficulty, useSRS]);
 
   const startQuiz = async () => {
     if (!isCameraOn) await startCamera();
@@ -117,6 +126,7 @@ export function PracticeQuizMode({ className = '' }: { className?: string }) {
       setTimeLeft(prev => {
         if (prev <= 1) {
           // Time's up for this sign
+          recordResult(quizSigns[currentIndex], false, DIFFICULTY_CONFIG[difficulty].timeLimit * 1000);
           setResults(r => [...r, { sign: quizSigns[currentIndex], correct: false, timeUsed: DIFFICULTY_CONFIG[difficulty].timeLimit, confidence: 0 }]);
           if (currentIndex + 1 >= quizSigns.length) {
             setQuizComplete(true);
@@ -159,6 +169,7 @@ export function PracticeQuizMode({ className = '' }: { className?: string }) {
       if (smoothed.sign === target || smoothed.sign === target.charAt(0)) {
         const timeUsed = (Date.now() - startTimeRef.current) / 1000;
         setMatched(true);
+        recordResult(target, true, timeUsed * 1000);
         setResults(r => [...r, { sign: target, correct: true, timeUsed, confidence: smoothed.confidence }]);
 
         // Auto-advance after brief celebration
@@ -181,6 +192,7 @@ export function PracticeQuizMode({ className = '' }: { className?: string }) {
 
   const skipSign = () => {
     const timeUsed = (Date.now() - startTimeRef.current) / 1000;
+    recordResult(quizSigns[currentIndex], false, timeUsed * 1000);
     setResults(r => [...r, { sign: quizSigns[currentIndex], correct: false, timeUsed, confidence: 0 }]);
     if (currentIndex + 1 >= quizSigns.length) {
       setQuizComplete(true);
@@ -215,17 +227,17 @@ export function PracticeQuizMode({ className = '' }: { className?: string }) {
             <p className="text-sm text-muted-foreground">
               The AI will show you a target sign — perform it correctly before time runs out!
             </p>
-            <div className="flex gap-2">
-              {(['easy', 'medium', 'hard'] as Difficulty[]).map(d => (
-                <Button
-                  key={d}
-                  variant={difficulty === d ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setDifficulty(d)}
-                >
-                  {d.charAt(0).toUpperCase() + d.slice(1)}
-                </Button>
-              ))}
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                {(['easy', 'medium', 'hard'] as Difficulty[]).map(d => (
+                  <Button key={d} variant={difficulty === d ? 'default' : 'outline'} size="sm" onClick={() => setDifficulty(d)}>
+                    {d.charAt(0).toUpperCase() + d.slice(1)}
+                  </Button>
+                ))}
+              </div>
+              <Button variant={useSRS ? 'default' : 'outline'} size="sm" onClick={() => setUseSRS(!useSRS)} title="Smart Review prioritizes signs you struggle with">
+                🧠 Smart Review {useSRS ? 'ON' : 'OFF'}
+              </Button>
             </div>
             <div className="text-xs text-muted-foreground space-y-1">
               <p>⏱ Time per sign: {DIFFICULTY_CONFIG[difficulty].timeLimit}s</p>
