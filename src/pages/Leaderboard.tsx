@@ -316,51 +316,84 @@ export default function Leaderboard() {
                 {multiplayerStats.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">No multiplayer matches yet. Play a 1v1 battle in Practice!</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12">#</TableHead>
-                        <TableHead>Player</TableHead>
-                        <TableHead className="text-center">Wins</TableHead>
-                        <TableHead className="text-center">Matches</TableHead>
-                        <TableHead className="text-center">Win Rate</TableHead>
-                        <TableHead className="text-center">Total Score</TableHead>
-                        <TableHead className="text-center">Avg Time</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  <>
+                    {/* Desktop table */}
+                    <div className="hidden md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12">#</TableHead>
+                            <TableHead>Player</TableHead>
+                            <TableHead className="text-center">Wins</TableHead>
+                            <TableHead className="text-center">Matches</TableHead>
+                            <TableHead className="text-center">Win Rate</TableHead>
+                            <TableHead className="text-center">Total Score</TableHead>
+                            <TableHead className="text-center">Avg Time</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {multiplayerStats.map((stat, i) => (
+                            <TableRow key={stat.user_id} className={stat.user_id === user?.id ? 'bg-primary/5' : ''}>
+                              <TableCell>
+                                {i === 0 ? <Crown className="w-5 h-5 text-primary" /> :
+                                 i === 1 ? <Medal className="w-5 h-5 text-muted-foreground" /> :
+                                 i === 2 ? <Award className="w-5 h-5 text-secondary-foreground" /> :
+                                 <span className="text-sm font-medium text-muted-foreground">#{i + 1}</span>}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  {stat.user_name}
+                                  {stat.user_id === user?.id && <Badge variant="outline" className="text-xs">You</Badge>}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center font-bold text-primary">{stat.total_wins}</TableCell>
+                              <TableCell className="text-center">{stat.total_matches}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant={stat.win_rate >= 60 ? "default" : stat.win_rate >= 40 ? "secondary" : "outline"}>
+                                  {stat.win_rate}%
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">{stat.total_score}</TableCell>
+                              <TableCell className="text-center text-muted-foreground">
+                                <span className="flex items-center justify-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {(stat.avg_response_time_ms / 1000).toFixed(1)}s
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile card layout */}
+                    <div className="md:hidden space-y-3">
                       {multiplayerStats.map((stat, i) => (
-                        <TableRow key={stat.user_id} className={stat.user_id === user?.id ? 'bg-primary/5' : ''}>
-                          <TableCell>
-                            {i === 0 ? <Crown className="w-5 h-5 text-primary" /> :
-                             i === 1 ? <Medal className="w-5 h-5 text-muted-foreground" /> :
-                             i === 2 ? <Award className="w-5 h-5 text-secondary-foreground" /> :
-                             <span className="text-sm font-medium text-muted-foreground">#{i + 1}</span>}
-                          </TableCell>
-                          <TableCell className="font-medium">
+                        <div key={stat.user_id} className={`flex items-center gap-3 p-3 rounded-lg border ${stat.user_id === user?.id ? 'bg-primary/5 border-primary/30' : 'bg-muted/30 border-border/50'}`}>
+                          <div className="shrink-0">
+                            {i === 0 ? <Crown className="w-6 h-6 text-primary" /> :
+                             i === 1 ? <Medal className="w-6 h-6 text-muted-foreground" /> :
+                             i === 2 ? <Award className="w-6 h-6 text-secondary-foreground" /> :
+                             <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-muted-foreground">#{i + 1}</span>}
+                          </div>
+                          <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              {stat.user_name}
+                              <p className="font-medium truncate">{stat.user_name}</p>
                               {stat.user_id === user?.id && <Badge variant="outline" className="text-xs">You</Badge>}
                             </div>
-                          </TableCell>
-                          <TableCell className="text-center font-bold text-primary">{stat.total_wins}</TableCell>
-                          <TableCell className="text-center">{stat.total_matches}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={stat.win_rate >= 60 ? "default" : stat.win_rate >= 40 ? "secondary" : "outline"}>
-                              {stat.win_rate}%
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center">{stat.total_score}</TableCell>
-                          <TableCell className="text-center text-muted-foreground">
-                            <span className="flex items-center justify-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {(stat.avg_response_time_ms / 1000).toFixed(1)}s
-                            </span>
-                          </TableCell>
-                        </TableRow>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                              <span className="font-bold text-primary">{stat.total_wins}W</span>
+                              <span>{stat.total_matches} matches</span>
+                              <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{(stat.avg_response_time_ms / 1000).toFixed(1)}s</span>
+                            </div>
+                          </div>
+                          <Badge variant={stat.win_rate >= 60 ? "default" : stat.win_rate >= 40 ? "secondary" : "outline"} className="shrink-0">
+                            {stat.win_rate}%
+                          </Badge>
+                        </div>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
