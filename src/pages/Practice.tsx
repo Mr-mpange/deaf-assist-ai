@@ -204,32 +204,32 @@ export default function Practice() {
         )}
 
         <Tabs defaultValue="practice" className="w-full">
-          <TabsList className="grid w-full max-w-3xl grid-cols-7">
-            <TabsTrigger value="practice" className="flex items-center gap-1.5">
+          <TabsList className="flex w-full max-w-3xl overflow-x-auto">
+            <TabsTrigger value="practice" className="flex items-center gap-1.5 min-w-fit">
               <Hand className="w-4 h-4" />
               <span className="hidden sm:inline">Practice</span>
             </TabsTrigger>
-            <TabsTrigger value="quiz" className="flex items-center gap-1.5">
+            <TabsTrigger value="quiz" className="flex items-center gap-1.5 min-w-fit">
               <Target className="w-4 h-4" />
               <span className="hidden sm:inline">Quiz</span>
             </TabsTrigger>
-            <TabsTrigger value="multiplayer" className="flex items-center gap-1.5">
+            <TabsTrigger value="multiplayer" className="flex items-center gap-1.5 min-w-fit">
               <Swords className="w-4 h-4" />
               <span className="hidden sm:inline">1v1</span>
             </TabsTrigger>
-            <TabsTrigger value="communicate" className="flex items-center gap-1.5">
+            <TabsTrigger value="communicate" className="flex items-center gap-1.5 min-w-fit">
               <MessageSquare className="w-4 h-4" />
-              <span className="hidden sm:inline">Communicate</span>
+              <span className="hidden sm:inline">Chat</span>
             </TabsTrigger>
-            <TabsTrigger value="tutor" className="flex items-center gap-1.5">
+            <TabsTrigger value="tutor" className="flex items-center gap-1.5 min-w-fit">
               <Bot className="w-4 h-4" />
-              <span className="hidden sm:inline">AI Tutor</span>
+              <span className="hidden sm:inline">AI</span>
             </TabsTrigger>
-            <TabsTrigger value="srs" className="flex items-center gap-1.5">
+            <TabsTrigger value="srs" className="flex items-center gap-1.5 min-w-fit">
               <Brain className="w-4 h-4" />
               <span className="hidden sm:inline">SRS</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-1.5">
+            <TabsTrigger value="history" className="flex items-center gap-1.5 min-w-fit">
               <TrendingUp className="w-4 h-4" />
               <span className="hidden sm:inline">History</span>
             </TabsTrigger>
