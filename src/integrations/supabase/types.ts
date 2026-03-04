@@ -163,6 +163,45 @@ export type Database = {
         }
         Relationships: []
       }
+      match_results: {
+        Row: {
+          avg_response_time_ms: number | null
+          created_at: string
+          id: string
+          is_winner: boolean
+          room_code: string
+          score: number
+          signs_correct: number
+          signs_total: number
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          avg_response_time_ms?: number | null
+          created_at?: string
+          id?: string
+          is_winner?: boolean
+          room_code: string
+          score?: number
+          signs_correct?: number
+          signs_total?: number
+          user_id: string
+          user_name: string
+        }
+        Update: {
+          avg_response_time_ms?: number | null
+          created_at?: string
+          id?: string
+          is_winner?: boolean
+          room_code?: string
+          score?: number
+          signs_correct?: number
+          signs_total?: number
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
       practice_sessions: {
         Row: {
           accuracy_score: number | null

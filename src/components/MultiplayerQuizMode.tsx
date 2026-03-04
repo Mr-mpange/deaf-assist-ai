@@ -262,6 +262,40 @@ export function MultiplayerQuizMode({ className = '' }: { className?: string }) 
     }
   }, [handResults, gameState, matched, currentIndex, quizSigns, drawLandmarks]);
 
+  // Save match results to database
+  const saveMatchResults = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const myPlayer = players.find(p => p.userId === myIdRef.current);
+      if (!myPlayer) return;
+
+      const sorted = [...players].sort((a, b) => b.score - a.score || a.totalTime - b.totalTime);
+      const isWinner = sorted[0]?.userId === myIdRef.current;
+
+      await supabase.from('match_results').insert({
+        room_code: roomCode,
+        user_id: user.id,
+        user_name: myPlayer.name,
+        score: myPlayer.score,
+        signs_correct: myPlayer.score,
+        signs_total: quizSigns.length,
+        avg_response_time_ms: Math.round(myPlayer.avgTime * 1000),
+        is_winner: isWinner,
+      });
+    } catch (err) {
+      console.error('Failed to save match result:', err);
+    }
+  }, [players, roomCode, quizSigns]);
+
+  // Save results when game ends
+  useEffect(() => {
+    if (gameState === 'results' && players.length > 0) {
+      saveMatchResults();
+    }
+  }, [gameState]);
+
   // Cleanup
   useEffect(() => {
     return () => {
