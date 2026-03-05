@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
 import { Navigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { Menu } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -31,15 +32,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
+
+      {/* Mobile header with hamburger */}
+      <header className={cn(
+        "fixed top-0 right-0 z-30 h-14 flex items-center px-4 bg-background/80 backdrop-blur-lg border-b border-border/50 lg:hidden",
+        "left-20"
+      )}>
+        <button
+          onClick={toggleCollapsed}
+          className="p-2 -ml-2 rounded-lg hover:bg-muted transition-colors"
+          aria-label="Toggle menu"
+        >
+          <Menu className="w-5 h-5 text-foreground" />
+        </button>
+      </header>
       
       <main className={cn(
         "min-h-screen transition-all duration-300",
-        // Mobile: always collapsed sidebar (20px padding)
-        // Desktop: dynamic padding based on collapsed state
         "pl-20",
         !collapsed && "lg:pl-64"
       )}>
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+        <div className="p-6 pt-20 lg:pt-8 lg:p-8 max-w-7xl mx-auto">
           {children}
         </div>
       </main>
