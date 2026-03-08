@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,13 +13,41 @@ interface AITutorChatProps {
   className?: string;
 }
 
+// Extract words that the tutor suggests to fingerspell
+function extractSpellableWords(messages: { role: string; content: string }[]): string[] {
+  const words: string[] = [];
+  const patterns = [
+    /fingerspell(?:ing)?\s+["']?(\w+)["']?/gi,
+    /spell(?:ing)?\s+(?:out\s+)?["']?(\w+)["']?/gi,
+    /spell\s+it[:\s]+["']?(\w+)["']?/gi,
+    /letter[s]?\s+(?:in|of|for)\s+["']?(\w+)["']?/gi,
+  ];
+
+  for (const msg of messages) {
+    if (msg.role !== 'assistant') continue;
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(msg.content)) !== null) {
+        const w = match[1];
+        if (w && w.length >= 2 && w.length <= 20 && !['the', 'this', 'that', 'out', 'it'].includes(w.toLowerCase())) {
+          words.push(w);
+        }
+      }
+    }
+  }
+  return [...new Set(words)];
+}
+
 export function AITutorChat({ detectedSigns, className }: AITutorChatProps) {
   const [input, setInput] = useState('');
   const [translateInput, setTranslateInput] = useState('');
   const [mode, setMode] = useState<'tutor' | 'translate'>('tutor');
   const [showSpelling, setShowSpelling] = useState(false);
+  const [spellingWord, setSpellingWord] = useState<string | undefined>();
   const scrollRef = useRef<HTMLDivElement>(null);
   const { messages, isLoading, sendMessage, clearMessages, requestFeedback, translateText } = useAITutor();
+
+  const spellableWords = useMemo(() => extractSpellableWords(messages), [messages]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -43,6 +71,11 @@ export function AITutorChat({ detectedSigns, className }: AITutorChatProps) {
   const handleFeedback = () => {
     if (!detectedSigns?.length || isLoading) return;
     requestFeedback(detectedSigns);
+  };
+
+  const handleSpellWord = (word: string) => {
+    setSpellingWord(word);
+    setShowSpelling(true);
   };
 
   return (
@@ -74,7 +107,10 @@ export function AITutorChat({ detectedSigns, className }: AITutorChatProps) {
               <Button
                 variant={showSpelling ? 'default' : 'ghost'}
                 size="sm"
-                onClick={() => setShowSpelling(!showSpelling)}
+                onClick={() => {
+                  setShowSpelling(!showSpelling);
+                  if (showSpelling) setSpellingWord(undefined);
+                }}
               >
                 <Hand className="w-3 h-3 mr-1" />
                 Spell
@@ -146,6 +182,24 @@ export function AITutorChat({ detectedSigns, className }: AITutorChatProps) {
             </div>
           </ScrollArea>
 
+          {/* Spell this for me — quick action buttons */}
+          {spellableWords.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {spellableWords.slice(-3).map((w) => (
+                <Button
+                  key={w}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs gap-1"
+                  onClick={() => handleSpellWord(w)}
+                >
+                  <Hand className="w-3 h-3" />
+                  Spell "{w}"
+                </Button>
+              ))}
+            </div>
+          )}
+
           {/* Quick actions */}
           {detectedSigns && detectedSigns.length > 0 && messages.length > 0 && (
             <Button
@@ -192,7 +246,7 @@ export function AITutorChat({ detectedSigns, className }: AITutorChatProps) {
       </Card>
 
       {/* Fingerspelling Display */}
-      {showSpelling && <FingerspellingDisplay />}
+      {showSpelling && <FingerspellingDisplay initialWord={spellingWord} key={spellingWord || 'manual'} />}
     </div>
   );
 }
