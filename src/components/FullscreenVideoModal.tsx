@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Crown, Mic, MicOff, VideoOff, Loader2 } from 'lucide-react';
+import { X, Crown, Mic, MicOff, VideoOff, Loader2, PictureInPicture2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
@@ -229,9 +229,30 @@ export function FullscreenVideoModal({
             <X className="w-6 h-6" />
           </Button>
 
+          {/* Picture-in-Picture button */}
+          {stream && !isVideoOff && document.pictureInPictureEnabled && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (videoRef.current) {
+                  if (document.pictureInPictureElement === videoRef.current) {
+                    document.exitPictureInPicture().catch(console.error);
+                  } else {
+                    videoRef.current.requestPictureInPicture().catch(console.error);
+                  }
+                }
+              }}
+              className="absolute top-4 right-16 z-50 bg-black/50 hover:bg-black/70 text-white"
+              title="Picture-in-Picture"
+            >
+              <PictureInPicture2 className="w-6 h-6" />
+            </Button>
+          )}
           {/* Debug refresh button (development only) */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="absolute top-4 right-16 z-50 space-x-2">
+            <div className="absolute top-4 right-32 z-50 space-x-2">
               <Button
                 variant="ghost"
                 size="sm"
@@ -277,7 +298,6 @@ export function FullscreenVideoModal({
                 playsInline
                 muted={isLocal}
                 controls={false}
-                disablePictureInPicture
                 onClick={(e) => e.stopPropagation()}
                 className="w-full h-full"
                 style={{ 
