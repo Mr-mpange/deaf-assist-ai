@@ -17,7 +17,9 @@ import {
   Target,
   TrendingUp,
   Swords,
-  Brain
+  Brain,
+  BookOpen,
+  Eye
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
