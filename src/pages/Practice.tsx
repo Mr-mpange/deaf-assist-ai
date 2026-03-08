@@ -19,7 +19,8 @@ import {
   Swords,
   Brain,
   BookOpen,
-  Eye
+  Eye,
+  User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -36,6 +37,7 @@ import { SpacedRepetitionDashboard } from '@/components/SpacedRepetitionDashboar
 import { ASLAlphabetGallery } from '@/components/ASLAlphabetGallery';
 import { FingerspellingQuiz } from '@/components/FingerspellingQuiz';
 import { QuizLeaderboard } from '@/components/QuizLeaderboard';
+import { SignLanguageAvatar } from '@/components/SignLanguageAvatar';
 
 export default function Practice() {
   const [leaderboardRefresh, setLeaderboardRefresh] = useState(0);
@@ -246,6 +248,10 @@ export default function Practice() {
             <TabsTrigger value="history" className="flex items-center gap-1.5 min-w-fit">
               <TrendingUp className="w-4 h-4" />
               <span className="hidden sm:inline">History</span>
+            </TabsTrigger>
+            <TabsTrigger value="avatar" className="flex items-center gap-1.5 min-w-fit">
+              <User className="w-4 h-4" />
+              <span className="hidden sm:inline">3D Avatar</span>
             </TabsTrigger>
           </TabsList>
 
@@ -565,6 +571,38 @@ export default function Practice() {
 
           <TabsContent value="history" className="mt-6">
             <GestureHistoryChart className="max-w-3xl" />
+          </TabsContent>
+
+          <TabsContent value="avatar" className="mt-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <SignLanguageAvatar />
+              <Card className="border-border/50 shadow-card">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <User className="w-5 h-5 text-primary" />
+                    3D Sign Language Avatar
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-muted-foreground text-sm">
+                    Our 3D avatar demonstrates sign language with realistic arm and hand movements. 
+                    Click any sign button to watch the animated demonstration.
+                  </p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex gap-2"><span>🤖</span><span>50+ animated signs available</span></div>
+                    <div className="flex gap-2"><span>🎯</span><span>Smooth transitions between poses</span></div>
+                    <div className="flex gap-2"><span>👋</span><span>8 hand shapes: open, fist, point, flat, claw, pinch, thumbsup, ok</span></div>
+                    <div className="flex gap-2"><span>🔄</span><span>Also appears in Live Sessions alongside real-time captions</span></div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-primary/5">
+                    <p className="text-xs text-muted-foreground">
+                      <strong>Tip:</strong> The avatar also works in Live Sessions — when someone speaks, matching words 
+                      are automatically animated on the avatar for visual learning!
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

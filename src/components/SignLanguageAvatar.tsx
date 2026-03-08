@@ -420,9 +420,14 @@ export function SignLanguageAvatar({
 
           {/* Quick action buttons */}
           <div className="p-3 border-t border-border/50">
-            <p className="text-xs text-muted-foreground mb-2">Try a sign:</p>
-            <div className="flex flex-wrap gap-1.5">
-              {['hello', 'thank you', 'yes', 'no', 'please', 'help', 'love', 'good', 'sorry', 'understand'].map((word) => (
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground">Try a sign:</p>
+              <Badge variant="outline" className="text-xs">
+                {Object.keys(signAnimations).length} signs
+              </Badge>
+            </div>
+            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+              {Object.keys(signAnimations).map((word) => (
                 <Button
                   key={word}
                   variant="outline"
