@@ -9,7 +9,8 @@ import {
   Crown,
   RefreshCw,
   Video,
-  Maximize2
+  Maximize2,
+  PictureInPicture2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -267,12 +268,34 @@ export function VideoTile({
           )}
         </div>
         
-        {/* Expand button overlay */}
-        {onClick && (
-          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-            <div className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center cursor-pointer transition-colors">
-              <Maximize2 className="w-4 h-4 text-white" />
-            </div>
+        {/* Action buttons overlay */}
+        {(onClick || (stream && !isVideoOff)) && (
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+            {/* PiP button */}
+            {stream && !isVideoOff && document.pictureInPictureEnabled && (
+              <div
+                className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center cursor-pointer transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (videoRef.current && document.pictureInPictureEnabled) {
+                    if (document.pictureInPictureElement === videoRef.current) {
+                      document.exitPictureInPicture().catch(console.error);
+                    } else {
+                      videoRef.current.requestPictureInPicture().catch(console.error);
+                    }
+                  }
+                }}
+                title="Picture-in-Picture"
+              >
+                <PictureInPicture2 className="w-4 h-4 text-white" />
+              </div>
+            )}
+            {/* Expand button */}
+            {onClick && (
+              <div className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center cursor-pointer transition-colors">
+                <Maximize2 className="w-4 h-4 text-white" />
+              </div>
+            )}
           </div>
         )}
 
