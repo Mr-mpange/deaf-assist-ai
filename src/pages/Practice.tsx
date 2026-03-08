@@ -19,7 +19,8 @@ import {
   Swords,
   Brain,
   BookOpen,
-  Eye
+  Eye,
+  User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -36,6 +37,7 @@ import { SpacedRepetitionDashboard } from '@/components/SpacedRepetitionDashboar
 import { ASLAlphabetGallery } from '@/components/ASLAlphabetGallery';
 import { FingerspellingQuiz } from '@/components/FingerspellingQuiz';
 import { QuizLeaderboard } from '@/components/QuizLeaderboard';
+import { SignLanguageAvatar } from '@/components/SignLanguageAvatar';
 
 export default function Practice() {
   const [leaderboardRefresh, setLeaderboardRefresh] = useState(0);
@@ -246,6 +248,10 @@ export default function Practice() {
             <TabsTrigger value="history" className="flex items-center gap-1.5 min-w-fit">
               <TrendingUp className="w-4 h-4" />
               <span className="hidden sm:inline">History</span>
+            </TabsTrigger>
+            <TabsTrigger value="avatar" className="flex items-center gap-1.5 min-w-fit">
+              <User className="w-4 h-4" />
+              <span className="hidden sm:inline">3D Avatar</span>
             </TabsTrigger>
           </TabsList>
 
