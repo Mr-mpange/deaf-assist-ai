@@ -17,7 +17,9 @@ import {
   Target,
   TrendingUp,
   Swords,
-  Brain
+  Brain,
+  BookOpen,
+  Eye
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +33,8 @@ import { GestureHistoryChart, addDetectionToHistory } from '@/components/Gesture
 import { classifyWithSmoothing, getDetectionQuality, resetClassifier } from '@/lib/signClassifier';
 import { MultiplayerQuizMode } from '@/components/MultiplayerQuizMode';
 import { SpacedRepetitionDashboard } from '@/components/SpacedRepetitionDashboard';
+import { ASLAlphabetGallery } from '@/components/ASLAlphabetGallery';
+import { FingerspellingQuiz } from '@/components/FingerspellingQuiz';
 
 export default function Practice() {
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -224,6 +228,14 @@ export default function Practice() {
             <TabsTrigger value="tutor" className="flex items-center gap-1.5 min-w-fit">
               <Bot className="w-4 h-4" />
               <span className="hidden sm:inline">AI</span>
+            </TabsTrigger>
+            <TabsTrigger value="alphabet" className="flex items-center gap-1.5 min-w-fit">
+              <BookOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">ABC</span>
+            </TabsTrigger>
+            <TabsTrigger value="spell-quiz" className="flex items-center gap-1.5 min-w-fit">
+              <Eye className="w-4 h-4" />
+              <span className="hidden sm:inline">Spell Quiz</span>
             </TabsTrigger>
             <TabsTrigger value="srs" className="flex items-center gap-1.5 min-w-fit">
               <Brain className="w-4 h-4" />
@@ -486,6 +498,36 @@ export default function Practice() {
                     <div className="flex gap-2"><span>3️⃣</span><span>Sign each target before the timer runs out</span></div>
                     <div className="flex gap-2"><span>🏆</span><span>Most correct signs + fastest time wins!</span></div>
                   </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="alphabet" className="mt-6">
+            <ASLAlphabetGallery />
+          </TabsContent>
+
+          <TabsContent value="spell-quiz" className="mt-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <FingerspellingQuiz />
+              <Card className="border-border/50 shadow-card">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-primary" />
+                    How It Works
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <p className="text-muted-foreground">Test your ability to recognize ASL fingerspelling hand signs!</p>
+                  <div className="space-y-2">
+                    <div className="flex gap-2"><span>👀</span><span>See an AI-generated hand sign image</span></div>
+                    <div className="flex gap-2"><span>⌨️</span><span>Type the letter you think it represents</span></div>
+                    <div className="flex gap-2"><span>✅</span><span>Get instant feedback on your answer</span></div>
+                    <div className="flex gap-2"><span>🏆</span><span>Try for a perfect score!</span></div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Tip: Study the ABC gallery first to learn each hand shape, then test yourself here!
+                  </p>
                 </CardContent>
               </Card>
             </div>
