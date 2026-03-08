@@ -249,10 +249,10 @@ export function FullscreenVideoModal({
             >
               <PictureInPicture2 className="w-6 h-6" />
             </Button>
-          )
+          )}
           {/* Debug refresh button (development only) */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="absolute top-4 right-16 z-50 space-x-2">
+            <div className="absolute top-4 right-32 z-50 space-x-2">
               <Button
                 variant="ghost"
                 size="sm"
