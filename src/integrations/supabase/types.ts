@@ -259,6 +259,7 @@ export type Database = {
       quiz_scores: {
         Row: {
           completed_at: string
+          difficulty: string
           id: string
           quiz_type: string
           score: number
@@ -269,6 +270,7 @@ export type Database = {
         }
         Insert: {
           completed_at?: string
+          difficulty?: string
           id?: string
           quiz_type?: string
           score?: number
@@ -279,6 +281,7 @@ export type Database = {
         }
         Update: {
           completed_at?: string
+          difficulty?: string
           id?: string
           quiz_type?: string
           score?: number

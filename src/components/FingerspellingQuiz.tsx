@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { Loader2, Eye, Check, X, RotateCcw, Trophy, Timer, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +13,46 @@ const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-han
 const IMAGE_CACHE_KEY = 'asl-hand-images';
 
 const alphabet = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+// Groups of visually similar ASL letters for hard mode
+const similarGroups: string[][] = [
+  ['a', 's', 't', 'e', 'm', 'n'],  // closed fist variants
+  ['d', 'g', 'q', 'x'],            // pointing variants
+  ['k', 'p', 'v', 'u', 'r'],       // two-finger variants
+  ['b', 'f', 'w'],                  // open hand variants
+  ['i', 'j', 'y'],                  // pinky variants
+  ['c', 'o'],                       // curved hand variants
+  ['l', 'h'],                       // L/H shapes
+];
+
+const aslDescriptions: Record<string, string> = {
+  a: 'Fist with thumb at the side',
+  b: 'Flat hand up, thumb across palm',
+  c: 'Curved hand, like holding a cup',
+  d: 'Index finger up, others touch thumb',
+  e: 'Fingers curled down, thumb tucked',
+  f: 'Thumb and index circle, others up',
+  g: 'Index and thumb point sideways',
+  h: 'Index and middle point sideways',
+  i: 'Pinky finger up, fist closed',
+  j: 'Pinky up, trace J in the air',
+  k: 'Index and middle up, thumb between',
+  l: 'L shape — index up, thumb out',
+  m: 'Three fingers over thumb, fist down',
+  n: 'Two fingers over thumb, fist down',
+  o: 'All fingers touch thumb, O shape',
+  p: 'Like K but pointing down',
+  q: 'Like G but pointing down',
+  r: 'Index and middle crossed',
+  s: 'Fist with thumb over fingers',
+  t: 'Thumb between index and middle',
+  u: 'Index and middle up together',
+  v: 'Index and middle up, spread apart',
+  w: 'Index, middle, and ring up spread',
+  x: 'Index finger hooked',
+  y: 'Thumb and pinky out (hang loose)',
+  z: 'Index finger traces Z in air',
+};
 
 function getCachedImages(): Record<string, string> {
   try {
@@ -43,11 +84,13 @@ interface FingerspellingQuizProps {
 }
 
 type QuizState = 'idle' | 'loading' | 'question' | 'result' | 'finished';
+type Difficulty = 'easy' | 'medium' | 'hard';
 
 interface QuizScore {
   score: number;
   total_questions: number;
   timed: boolean;
+  difficulty: string;
   completed_at: string;
 }
 
@@ -60,11 +103,11 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
   const [score, setScore] = useState(0);
   const [totalAnswered, setTotalAnswered] = useState(0);
   const [images, setImages] = useState<Record<string, string>>(getCachedImages);
-  const [isLoadingImage, setIsLoadingImage] = useState(false);
   const [quizSize, setQuizSize] = useState(10);
   const [timedMode, setTimedMode] = useState(false);
   const [timePerQuestion, setTimePerQuestion] = useState(5);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [pastScores, setPastScores] = useState<QuizScore[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const fetchingRef = useRef(new Set<string>());
@@ -80,12 +123,12 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
       if (!user) return;
       const { data } = await supabase
         .from('quiz_scores')
-        .select('score, total_questions, timed, completed_at')
+        .select('score, total_questions, timed, difficulty, completed_at')
         .eq('user_id', user.id)
         .eq('quiz_type', 'fingerspelling')
         .order('completed_at', { ascending: false })
         .limit(10);
-      if (data) setPastScores(data);
+      if (data) setPastScores(data as QuizScore[]);
     };
     fetchScores();
   }, []);
@@ -127,14 +170,12 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
       setQuizState('question');
       return;
     }
-    setIsLoadingImage(true);
     setQuizState('loading');
     await fetchImage(currentLetter);
     const nextLetter = quizLetters[currentIdx + 1];
     if (nextLetter && !images[nextLetter]) {
       fetchImage(nextLetter);
     }
-    setIsLoadingImage(false);
     setQuizState('question');
   }, [currentLetter, currentIdx, quizLetters, images, fetchImage]);
 
@@ -156,7 +197,6 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
       timerRef.current = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
-            // Time's up — auto-submit wrong
             clearInterval(timerRef.current!);
             timerRef.current = null;
             setAnswerResult('wrong');
@@ -188,6 +228,7 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
       quiz_type: 'fingerspelling',
       timed: timedMode,
       time_per_question: timedMode ? timePerQuestion : null,
+      difficulty,
     });
 
     if (error) {
@@ -197,15 +238,30 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
         score: finalScore,
         total_questions: totalQ,
         timed: timedMode,
+        difficulty,
         completed_at: new Date().toISOString(),
       }, ...prev].slice(0, 10));
       toast({ title: 'Score Saved!', description: `${finalScore}/${totalQ} recorded to your profile` });
     }
   };
 
+  const buildQuizLetters = (): string[] => {
+    if (difficulty === 'hard') {
+      // Pick from similar-looking groups for more challenge
+      const pool: string[] = [];
+      const shuffledGroups = shuffleArray(similarGroups);
+      for (const group of shuffledGroups) {
+        pool.push(...group);
+        if (pool.length >= quizSize * 2) break;
+      }
+      return shuffleArray([...new Set(pool)]).slice(0, quizSize);
+    }
+    return shuffleArray(alphabet).slice(0, quizSize);
+  };
+
   const startQuiz = () => {
-    const shuffled = shuffleArray(alphabet).slice(0, quizSize);
-    setQuizLetters(shuffled);
+    const letters = buildQuizLetters();
+    setQuizLetters(letters);
     setCurrentIdx(0);
     setScore(0);
     setTotalAnswered(0);
@@ -223,8 +279,7 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
     const isCorrect = userAnswer.trim().toLowerCase() === currentLetter;
     setAnswerResult(isCorrect ? 'correct' : 'wrong');
     setTotalAnswered(prev => prev + 1);
-    const newScore = isCorrect ? score + 1 : score;
-    if (isCorrect) setScore(newScore);
+    if (isCorrect) setScore(prev => prev + 1);
     setQuizState('result');
   };
 
@@ -232,9 +287,8 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
     setUserAnswer('');
     setAnswerResult(null);
     if (currentIdx + 1 >= quizLetters.length) {
-      const finalScore = score;
       setQuizState('finished');
-      saveScore(finalScore, quizLetters.length);
+      saveScore(score, quizLetters.length);
     } else {
       setCurrentIdx(prev => prev + 1);
       setQuizState('loading');
@@ -271,6 +325,31 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
 
             {/* Settings */}
             <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
+              {/* Difficulty */}
+              <div>
+                <span className="text-sm text-muted-foreground mb-1.5 block">Difficulty:</span>
+                <div className="flex gap-2">
+                  {(['easy', 'medium', 'hard'] as Difficulty[]).map((d) => (
+                    <Button
+                      key={d}
+                      variant={difficulty === d ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1 capitalize"
+                      onClick={() => setDifficulty(d)}
+                    >
+                      {d === 'easy' ? '🟢' : d === 'medium' ? '🟡' : '🔴'} {d}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {difficulty === 'easy'
+                    ? 'Shows a letter hint below the image to help you learn'
+                    : difficulty === 'medium'
+                    ? 'Standard quiz — identify the hand sign'
+                    : 'Only similar-looking signs — the ultimate challenge!'}
+                </p>
+              </div>
+
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Questions:</span>
                 <select
@@ -344,9 +423,12 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
                         <span className="text-muted-foreground">
                           ({Math.round((s.score / s.total_questions) * 100)}%)
                         </span>
+                        <Badge variant="outline" className="text-xs py-0 capitalize">
+                          {s.difficulty}
+                        </Badge>
                         {s.timed && (
                           <span className="text-primary flex items-center gap-0.5">
-                            <Timer className="w-3 h-3" /> timed
+                            <Timer className="w-3 h-3" />
                           </span>
                         )}
                       </div>
@@ -372,7 +454,10 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
           <div className="space-y-4">
             {/* Progress */}
             <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-              <span>Question {currentIdx + 1} of {quizLetters.length}</span>
+              <div className="flex items-center gap-2">
+                <span>Q{currentIdx + 1}/{quizLetters.length}</span>
+                <Badge variant="outline" className="text-xs py-0 capitalize">{difficulty}</Badge>
+              </div>
               <span>Score: {score}/{totalAnswered}</span>
             </div>
             <Progress value={progress} className="h-1.5" />
@@ -412,6 +497,13 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
                 )}
               </div>
             </div>
+
+            {/* Easy mode hint */}
+            {difficulty === 'easy' && quizState === 'question' && (
+              <p className="text-center text-xs text-muted-foreground italic animate-fade-in">
+                💡 Hint: {aslDescriptions[currentLetter]}
+              </p>
+            )}
 
             <p className="text-center text-sm font-medium text-foreground">
               What letter is this hand sign?
@@ -454,6 +546,9 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
                     <p className="text-sm text-muted-foreground">
                       The answer was <span className="font-bold text-primary uppercase">{currentLetter}</span>
                     </p>
+                    <p className="text-xs text-muted-foreground italic">
+                      {aslDescriptions[currentLetter]}
+                    </p>
                   </div>
                 )}
                 <Button onClick={nextQuestion}>
@@ -469,13 +564,16 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
             <Trophy className="w-12 h-12 mx-auto text-primary" />
             <div>
               <p className="text-2xl font-bold text-foreground">{score} / {quizLetters.length}</p>
-              {timedMode && (
-                <p className="text-xs text-primary mt-1 flex items-center justify-center gap-1">
-                  <Timer className="w-3 h-3" />
-                  Timed challenge ({timePerQuestion}s per question)
-                </p>
-              )}
-              <p className="text-sm text-muted-foreground mt-1">
+              <div className="flex items-center justify-center gap-2 mt-1">
+                <Badge variant="outline" className="capitalize">{difficulty}</Badge>
+                {timedMode && (
+                  <span className="text-xs text-primary flex items-center gap-1">
+                    <Timer className="w-3 h-3" />
+                    {timePerQuestion}s/question
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
                 {score === quizLetters.length
                   ? 'Perfect score! You nailed every letter! 🎉'
                   : score >= quizLetters.length * 0.8
