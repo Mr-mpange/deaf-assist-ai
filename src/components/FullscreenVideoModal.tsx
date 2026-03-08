@@ -229,6 +229,27 @@ export function FullscreenVideoModal({
             <X className="w-6 h-6" />
           </Button>
 
+          {/* Picture-in-Picture button */}
+          {stream && !isVideoOff && document.pictureInPictureEnabled && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (videoRef.current) {
+                  if (document.pictureInPictureElement === videoRef.current) {
+                    document.exitPictureInPicture().catch(console.error);
+                  } else {
+                    videoRef.current.requestPictureInPicture().catch(console.error);
+                  }
+                }
+              }}
+              className="absolute top-4 right-16 z-50 bg-black/50 hover:bg-black/70 text-white"
+              title="Picture-in-Picture"
+            >
+              <PictureInPicture2 className="w-6 h-6" />
+            </Button>
+          )
           {/* Debug refresh button (development only) */}
           {process.env.NODE_ENV === 'development' && (
             <div className="absolute top-4 right-16 z-50 space-x-2">
