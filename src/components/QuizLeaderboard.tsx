@@ -95,7 +95,7 @@ export function QuizLeaderboard({ className, refreshKey }: QuizLeaderboardProps)
     };
 
     fetchLeaderboard();
-  }, []);
+  }, [refreshKey]);
 
   const getRankIcon = (rank: number) => {
     if (rank === 0) return <Crown className="w-5 h-5 text-primary" />;
