@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { 
   BookOpen, 
   Play, 
@@ -20,8 +21,12 @@ import {
   Upload,
   Eye,
   CheckCircle2,
+  Flame,
+  Target,
+  Trophy,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { OnboardingWelcome } from '@/components/OnboardingWelcome';
 
 interface Lesson {
   id: string;
