@@ -186,7 +186,7 @@ export function VideoTile({
                 playsInline
                 muted={isLocal}
                 controls={false}
-                disablePictureInPicture
+                className="w-full h-full object-cover"
                 className="w-full h-full object-cover"
                 style={{ backgroundColor: '#000' }}
                 onLoadedMetadata={() => {
