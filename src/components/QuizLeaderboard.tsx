@@ -18,9 +18,10 @@ interface LeaderboardEntry {
 
 interface QuizLeaderboardProps {
   className?: string;
+  refreshKey?: number;
 }
 
-export function QuizLeaderboard({ className }: QuizLeaderboardProps) {
+export function QuizLeaderboard({ className, refreshKey }: QuizLeaderboardProps) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export function QuizLeaderboard({ className }: QuizLeaderboardProps) {
     };
 
     fetchLeaderboard();
-  }, []);
+  }, [refreshKey]);
 
   const getRankIcon = (rank: number) => {
     if (rank === 0) return <Crown className="w-5 h-5 text-primary" />;

@@ -8,6 +8,7 @@ import { Loader2, Eye, Check, X, RotateCcw, Trophy, Timer, TrendingUp } from 'lu
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { recordResult } from '@/lib/spacedRepetition';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-hand-sign`;
 const IMAGE_CACHE_KEY = 'asl-hand-images';
@@ -81,6 +82,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 
 interface FingerspellingQuizProps {
   className?: string;
+  onQuizComplete?: () => void;
 }
 
 type QuizState = 'idle' | 'loading' | 'question' | 'result' | 'finished';
@@ -94,7 +96,7 @@ interface QuizScore {
   completed_at: string;
 }
 
-export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
+export function FingerspellingQuiz({ className, onQuizComplete }: FingerspellingQuizProps) {
   const [quizState, setQuizState] = useState<QuizState>('idle');
   const [quizLetters, setQuizLetters] = useState<string[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -201,6 +203,9 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
             timerRef.current = null;
             setAnswerResult('wrong');
             setTotalAnswered(p => p + 1);
+            // Record timeout as incorrect in SRS
+            const letter = quizLetters[currentIdx];
+            if (letter) recordResult(`letter_${letter.toUpperCase()}`, false, timePerQuestion * 1000);
             setQuizState('result');
             return 0;
           }
@@ -280,6 +285,9 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
     setAnswerResult(isCorrect ? 'correct' : 'wrong');
     setTotalAnswered(prev => prev + 1);
     if (isCorrect) setScore(prev => prev + 1);
+    // Record in SRS
+    const responseMs = timedMode ? (timePerQuestion - timeLeft) * 1000 : 3000;
+    recordResult(`letter_${currentLetter.toUpperCase()}`, isCorrect, responseMs);
     setQuizState('result');
   };
 
@@ -289,6 +297,7 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
     if (currentIdx + 1 >= quizLetters.length) {
       setQuizState('finished');
       saveScore(score, quizLetters.length);
+      onQuizComplete?.();
     } else {
       setCurrentIdx(prev => prev + 1);
       setQuizState('loading');
