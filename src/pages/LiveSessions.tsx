@@ -664,16 +664,17 @@ export default function LiveSessions() {
                 
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground text-center">
-                    💡 Click on any video to view in fullscreen
+                    💡 Hover over any video and click the expand icon to view fullscreen
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  {/* Screen Share - pinned large view */}
                   {isScreenSharing && screenStream && (
-                    <div className="md:col-span-2">
+                    <div className="mb-4">
                       <VideoTile
                         stream={screenStream}
-                        name="Screen Share"
+                        name="Your Screen Share"
                         isScreenShare
-                        className="h-full"
+                        className="w-full aspect-video"
                         onClick={() => setFullscreenParticipant({
                           stream: screenStream,
                           name: "Screen Share",
@@ -686,7 +687,14 @@ export default function LiveSessions() {
                       />
                     </div>
                   )}
-                  
+
+                  {/* Participant tiles - smaller grid when screen sharing */}
+                  <div className={cn(
+                    "grid gap-4",
+                    isScreenSharing
+                      ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4"
+                      : "grid-cols-1 md:grid-cols-2"
+                  )}>
                   {participants.map((participant) => (
                     <VideoTile
                       key={`${participant.id}-${participant.stream?.id || 'no-stream'}-${participant.isVideoOff ? 'off' : 'on'}`}
