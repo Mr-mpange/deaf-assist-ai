@@ -511,26 +511,29 @@ export default function Practice() {
           <TabsContent value="spell-quiz" className="mt-6">
             <div className="grid lg:grid-cols-2 gap-6">
               <FingerspellingQuiz />
-              <Card className="border-border/50 shadow-card">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-primary" />
-                    How It Works
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <p className="text-muted-foreground">Test your ability to recognize ASL fingerspelling hand signs!</p>
-                  <div className="space-y-2">
-                    <div className="flex gap-2"><span>👀</span><span>See an AI-generated hand sign image</span></div>
-                    <div className="flex gap-2"><span>⌨️</span><span>Type the letter you think it represents</span></div>
-                    <div className="flex gap-2"><span>✅</span><span>Get instant feedback on your answer</span></div>
-                    <div className="flex gap-2"><span>🏆</span><span>Try for a perfect score!</span></div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Tip: Study the ABC gallery first to learn each hand shape, then test yourself here!
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="space-y-6">
+                <QuizLeaderboard />
+                <Card className="border-border/50 shadow-card">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Eye className="w-5 h-5 text-primary" />
+                      How It Works
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <p className="text-muted-foreground">Test your ability to recognize ASL fingerspelling hand signs!</p>
+                    <div className="space-y-2">
+                      <div className="flex gap-2"><span>🟢</span><span><strong>Easy</strong> — Shows a hint describing the hand shape</span></div>
+                      <div className="flex gap-2"><span>🟡</span><span><strong>Medium</strong> — Standard quiz, no hints</span></div>
+                      <div className="flex gap-2"><span>🔴</span><span><strong>Hard</strong> — Only similar-looking signs!</span></div>
+                      <div className="flex gap-2"><span>⚡</span><span><strong>Timed</strong> — Answer before time runs out</span></div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Tip: Study the ABC gallery first, then test yourself here!
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </TabsContent>
 
