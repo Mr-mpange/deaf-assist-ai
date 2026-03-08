@@ -187,7 +187,6 @@ export function VideoTile({
                 muted={isLocal}
                 controls={false}
                 className="w-full h-full object-cover"
-                className="w-full h-full object-cover"
                 style={{ backgroundColor: '#000' }}
                 onLoadedMetadata={() => {
                   console.log('Video metadata loaded for:', name);
