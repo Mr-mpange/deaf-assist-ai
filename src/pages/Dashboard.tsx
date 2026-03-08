@@ -68,10 +68,15 @@ interface DashboardStats {
 }
 
 function StudentDashboard() {
+  const { profile } = useAuth();
   const [recentLessons, setRecentLessons] = useState<Lesson[]>([]);
   const [upcomingSession, setUpcomingSession] = useState<LiveSession | null>(null);
   const [stats, setStats] = useState<Partial<DashboardStats>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem('deaflearn_onboarding_dismissed');
+  });
+  const [streakData, setStreakData] = useState({ current: 0, longest: 0 });
 
   useEffect(() => {
     fetchStudentData();
@@ -118,6 +123,18 @@ function StudentDashboard() {
         .from('session_participants')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user?.id);
+
+      // Fetch streak data
+      const { data: progressStats } = await supabase
+        .from('user_progress')
+        .select('current_streak, longest_streak')
+        .eq('user_id', user?.id)
+        .maybeSingle();
+
+      setStreakData({
+        current: progressStats?.current_streak || 0,
+        longest: progressStats?.longest_streak || 0,
+      });
 
       setRecentLessons(lessonsData || []);
       setUpcomingSession(sessionsData?.[0] || null);
