@@ -285,6 +285,9 @@ export function FingerspellingQuiz({ className, onQuizComplete }: Fingerspelling
     setAnswerResult(isCorrect ? 'correct' : 'wrong');
     setTotalAnswered(prev => prev + 1);
     if (isCorrect) setScore(prev => prev + 1);
+    // Record in SRS
+    const responseMs = timedMode ? (timePerQuestion - timeLeft) * 1000 : 3000;
+    recordResult(`letter_${currentLetter.toUpperCase()}`, isCorrect, responseMs);
     setQuizState('result');
   };
 
@@ -294,6 +297,7 @@ export function FingerspellingQuiz({ className, onQuizComplete }: Fingerspelling
     if (currentIdx + 1 >= quizLetters.length) {
       setQuizState('finished');
       saveScore(score, quizLetters.length);
+      onQuizComplete?.();
     } else {
       setCurrentIdx(prev => prev + 1);
       setQuizState('loading');
