@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Play, Pause, RotateCcw, Hand } from 'lucide-react';
+import { Play, Pause, RotateCcw, Hand, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// ASL fingerspelling hand descriptions for each letter
+const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-hand-sign`;
+
+// ASL fingerspelling descriptions for each letter
 const aslAlphabet: Record<string, { description: string; emoji: string }> = {
   a: { description: 'Fist with thumb at the side', emoji: '✊' },
   b: { description: 'Flat hand up, thumb across palm', emoji: '🖐' },
@@ -35,18 +37,100 @@ const aslAlphabet: Record<string, { description: string; emoji: string }> = {
   z: { description: 'Index finger traces Z in air', emoji: '☝️' },
 };
 
-interface FingerspellingDisplayProps {
-  className?: string;
+// LocalStorage cache for generated hand images
+const IMAGE_CACHE_KEY = 'asl-hand-images';
+
+function getCachedImages(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(IMAGE_CACHE_KEY) || '{}');
+  } catch {
+    return {};
+  }
 }
 
-export function FingerspellingDisplay({ className }: FingerspellingDisplayProps) {
-  const [word, setWord] = useState('');
+function setCachedImage(letter: string, dataUrl: string) {
+  const cache = getCachedImages();
+  cache[letter] = dataUrl;
+  try {
+    localStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Storage full — clear oldest entries
+    const keys = Object.keys(cache);
+    if (keys.length > 10) {
+      keys.slice(0, 5).forEach(k => delete cache[k]);
+      localStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(cache));
+    }
+  }
+}
+
+interface FingerspellingDisplayProps {
+  className?: string;
+  initialWord?: string;
+}
+
+export function FingerspellingDisplay({ className, initialWord }: FingerspellingDisplayProps) {
+  const [word, setWord] = useState(initialWord || '');
   const [activeWord, setActiveWord] = useState('');
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1000); // ms per letter
+  const [speed, setSpeed] = useState(1500); // slower default for image viewing
+  const [handImages, setHandImages] = useState<Record<string, string>>(getCachedImages);
+  const [loadingLetter, setLoadingLetter] = useState<string | null>(null);
+  const fetchingRef = useRef(new Set<string>());
 
   const letters = activeWord.toLowerCase().replace(/[^a-z]/g, '').split('');
+
+  // Auto-start if initialWord is provided
+  useEffect(() => {
+    if (initialWord?.trim()) {
+      setWord(initialWord.trim());
+      setActiveWord(initialWord.trim());
+      setCurrentIndex(0);
+      setIsPlaying(true);
+    }
+  }, [initialWord]);
+
+  // Fetch hand image for a letter
+  const fetchHandImage = useCallback(async (letter: string) => {
+    if (handImages[letter] || fetchingRef.current.has(letter)) return;
+    fetchingRef.current.add(letter);
+    setLoadingLetter(letter);
+
+    try {
+      const resp = await fetch(EDGE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ letter }),
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.image) {
+          setHandImages(prev => ({ ...prev, [letter]: data.image }));
+          setCachedImage(letter, data.image);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch hand image for', letter, err);
+    } finally {
+      fetchingRef.current.delete(letter);
+      setLoadingLetter(prev => (prev === letter ? null : prev));
+    }
+  }, [handImages]);
+
+  // Pre-fetch images for the current letter and next one
+  useEffect(() => {
+    if (currentIndex >= 0 && currentIndex < letters.length) {
+      const currentLetter = letters[currentIndex];
+      if (currentLetter) fetchHandImage(currentLetter);
+      // Pre-fetch next
+      const nextLetter = letters[currentIndex + 1];
+      if (nextLetter) fetchHandImage(nextLetter);
+    }
+  }, [currentIndex, letters, fetchHandImage]);
 
   const startSpelling = useCallback(() => {
     if (!word.trim()) return;
@@ -89,6 +173,7 @@ export function FingerspellingDisplay({ className }: FingerspellingDisplayProps)
 
   const currentLetter = letters[currentIndex];
   const letterData = currentLetter ? aslAlphabet[currentLetter] : null;
+  const currentHandImage = currentLetter ? handImages[currentLetter] : null;
 
   return (
     <Card className={cn('border-border/50 shadow-card p-4', className)}>
@@ -133,10 +218,27 @@ export function FingerspellingDisplay({ className }: FingerspellingDisplayProps)
             ))}
           </div>
 
-          {/* Current letter detail */}
+          {/* Current letter detail with hand image */}
           {letterData && currentIndex < letters.length && (
             <div className="text-center mb-4 animate-fade-in">
-              <div className="text-5xl mb-2">{letterData.emoji}</div>
+              {/* Hand image or loading/fallback */}
+              <div className="w-36 h-36 mx-auto mb-3 rounded-xl overflow-hidden bg-muted/50 flex items-center justify-center border border-border/30">
+                {currentHandImage ? (
+                  <img
+                    src={currentHandImage}
+                    alt={`ASL sign for letter ${currentLetter?.toUpperCase()}`}
+                    className="w-full h-full object-cover animate-scale-in"
+                  />
+                ) : loadingLetter === currentLetter ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                    <span className="text-xs text-muted-foreground">Generating...</span>
+                  </div>
+                ) : (
+                  <span className="text-5xl">{letterData.emoji}</span>
+                )}
+              </div>
+
               <p className="text-3xl font-bold uppercase text-primary mb-1">
                 {currentLetter}
               </p>
@@ -170,9 +272,9 @@ export function FingerspellingDisplay({ className }: FingerspellingDisplayProps)
               onChange={(e) => setSpeed(Number(e.target.value))}
               className="text-xs bg-muted rounded-md px-2 py-1.5 border border-border text-foreground"
             >
-              <option value={1500}>Slow</option>
-              <option value={1000}>Normal</option>
-              <option value={600}>Fast</option>
+              <option value={2000}>Slow</option>
+              <option value={1500}>Normal</option>
+              <option value={900}>Fast</option>
             </select>
           </div>
         </>
