@@ -638,6 +638,9 @@ export default function LiveSessions() {
           <StudentAnnouncementListener sessionId={activeSession.id} />
         )}
 
+        {/* Visual Alert Overlay for deaf accessibility */}
+        <VisualAlertOverlay sessionId={activeSession.id} />
+
         <div className="space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
