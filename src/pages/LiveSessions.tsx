@@ -872,6 +872,12 @@ export default function LiveSessions() {
                 />
               )}
 
+              {/* Live Captions with Sign Matching - for everyone */}
+              <LiveCaptionsPanel
+                isHost={isHost}
+                hostStream={localStream}
+              />
+
               {/* Session Chat - for everyone */}
               {user && profile && (
                 <SessionChatPanel
