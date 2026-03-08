@@ -203,6 +203,9 @@ export function FingerspellingQuiz({ className, onQuizComplete }: Fingerspelling
             timerRef.current = null;
             setAnswerResult('wrong');
             setTotalAnswered(p => p + 1);
+            // Record timeout as incorrect in SRS
+            const letter = quizLetters[currentIdx];
+            if (letter) recordResult(`letter_${letter.toUpperCase()}`, false, timePerQuestion * 1000);
             setQuizState('result');
             return 0;
           }
