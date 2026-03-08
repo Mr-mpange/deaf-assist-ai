@@ -97,9 +97,9 @@ export function QuizLeaderboard({ className }: QuizLeaderboardProps) {
   }, []);
 
   const getRankIcon = (rank: number) => {
-    if (rank === 0) return <Crown className="w-5 h-5 text-yellow-500" />;
-    if (rank === 1) return <Medal className="w-5 h-5 text-gray-400" />;
-    if (rank === 2) return <Medal className="w-5 h-5 text-amber-700" />;
+    if (rank === 0) return <Crown className="w-5 h-5 text-primary" />;
+    if (rank === 1) return <Medal className="w-5 h-5 text-muted-foreground" />;
+    if (rank === 2) return <Medal className="w-5 h-5 text-accent-foreground" />;
     return <span className="w-5 text-center text-sm font-medium text-muted-foreground">{rank + 1}</span>;
   };
 
