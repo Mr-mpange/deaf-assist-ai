@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { X, Crown, Mic, MicOff, VideoOff, Loader2 } from 'lucide-react';
+import { X, Crown, Mic, MicOff, VideoOff, Loader2, PictureInPicture2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
@@ -277,7 +277,7 @@ export function FullscreenVideoModal({
                 playsInline
                 muted={isLocal}
                 controls={false}
-                disablePictureInPicture
+                onClick={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
                 className="w-full h-full"
                 style={{ 
