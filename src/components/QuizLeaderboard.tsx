@@ -18,9 +18,10 @@ interface LeaderboardEntry {
 
 interface QuizLeaderboardProps {
   className?: string;
+  refreshKey?: number;
 }
 
-export function QuizLeaderboard({ className }: QuizLeaderboardProps) {
+export function QuizLeaderboard({ className, refreshKey }: QuizLeaderboardProps) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
