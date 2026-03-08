@@ -503,6 +503,36 @@ export default function Practice() {
             </div>
           </TabsContent>
 
+          <TabsContent value="alphabet" className="mt-6">
+            <ASLAlphabetGallery />
+          </TabsContent>
+
+          <TabsContent value="spell-quiz" className="mt-6">
+            <div className="grid lg:grid-cols-2 gap-6">
+              <FingerspellingQuiz />
+              <Card className="border-border/50 shadow-card">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-primary" />
+                    How It Works
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <p className="text-muted-foreground">Test your ability to recognize ASL fingerspelling hand signs!</p>
+                  <div className="space-y-2">
+                    <div className="flex gap-2"><span>👀</span><span>See an AI-generated hand sign image</span></div>
+                    <div className="flex gap-2"><span>⌨️</span><span>Type the letter you think it represents</span></div>
+                    <div className="flex gap-2"><span>✅</span><span>Get instant feedback on your answer</span></div>
+                    <div className="flex gap-2"><span>🏆</span><span>Try for a perfect score!</span></div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Tip: Study the ABC gallery first to learn each hand shape, then test yourself here!
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
           <TabsContent value="srs" className="mt-6">
             <div className="grid lg:grid-cols-2 gap-6">
               <SpacedRepetitionDashboard />
