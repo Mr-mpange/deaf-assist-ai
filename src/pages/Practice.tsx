@@ -31,6 +31,8 @@ import { GestureHistoryChart, addDetectionToHistory } from '@/components/Gesture
 import { classifyWithSmoothing, getDetectionQuality, resetClassifier } from '@/lib/signClassifier';
 import { MultiplayerQuizMode } from '@/components/MultiplayerQuizMode';
 import { SpacedRepetitionDashboard } from '@/components/SpacedRepetitionDashboard';
+import { ASLAlphabetGallery } from '@/components/ASLAlphabetGallery';
+import { FingerspellingQuiz } from '@/components/FingerspellingQuiz';
 
 export default function Practice() {
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -224,6 +226,14 @@ export default function Practice() {
             <TabsTrigger value="tutor" className="flex items-center gap-1.5 min-w-fit">
               <Bot className="w-4 h-4" />
               <span className="hidden sm:inline">AI</span>
+            </TabsTrigger>
+            <TabsTrigger value="alphabet" className="flex items-center gap-1.5 min-w-fit">
+              <BookOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">ABC</span>
+            </TabsTrigger>
+            <TabsTrigger value="spell-quiz" className="flex items-center gap-1.5 min-w-fit">
+              <Eye className="w-4 h-4" />
+              <span className="hidden sm:inline">Spell Quiz</span>
             </TabsTrigger>
             <TabsTrigger value="srs" className="flex items-center gap-1.5 min-w-fit">
               <Brain className="w-4 h-4" />
