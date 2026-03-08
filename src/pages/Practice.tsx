@@ -35,6 +35,7 @@ import { MultiplayerQuizMode } from '@/components/MultiplayerQuizMode';
 import { SpacedRepetitionDashboard } from '@/components/SpacedRepetitionDashboard';
 import { ASLAlphabetGallery } from '@/components/ASLAlphabetGallery';
 import { FingerspellingQuiz } from '@/components/FingerspellingQuiz';
+import { QuizLeaderboard } from '@/components/QuizLeaderboard';
 
 export default function Practice() {
   const [isCameraOn, setIsCameraOn] = useState(false);
