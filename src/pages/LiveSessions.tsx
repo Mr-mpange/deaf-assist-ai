@@ -58,6 +58,8 @@ import { SessionWhiteboard } from '@/components/SessionWhiteboard';
 import { BreakoutRoomsPanel } from '@/components/BreakoutRoomsPanel';
 import { SessionNotesPanel } from '@/components/SessionNotesPanel';
 import { SessionAnalytics } from '@/components/SessionAnalytics';
+import { LiveCaptionsPanel } from '@/components/LiveCaptionsPanel';
+import { VisualAlertOverlay } from '@/components/VisualAlertOverlay';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -636,6 +638,9 @@ export default function LiveSessions() {
           <StudentAnnouncementListener sessionId={activeSession.id} />
         )}
 
+        {/* Visual Alert Overlay for deaf accessibility */}
+        <VisualAlertOverlay sessionId={activeSession.id} />
+
         <div className="space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -869,6 +874,12 @@ export default function LiveSessions() {
                   participantName={profile.name}
                 />
               )}
+
+              {/* Live Captions with Sign Matching - for everyone */}
+              <LiveCaptionsPanel
+                isHost={isHost}
+                hostStream={localStream}
+              />
 
               {/* Session Chat - for everyone */}
               {user && profile && (
