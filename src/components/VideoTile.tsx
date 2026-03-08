@@ -170,7 +170,7 @@ export function VideoTile({
 
   return (
     <Card className={cn(
-      "border-border/50 shadow-card overflow-hidden transition-all duration-200",
+      "border-border/50 shadow-card overflow-hidden transition-all duration-200 group",
       isHost && "ring-2 ring-primary",
       onClick && "cursor-pointer hover:ring-2 hover:ring-primary/50 hover:shadow-lg",
       className
