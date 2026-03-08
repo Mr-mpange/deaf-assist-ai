@@ -151,13 +151,57 @@ function StudentDashboard() {
     }
   };
 
+  const handleDismissOnboarding = () => {
+    setShowOnboarding(false);
+    localStorage.setItem('deaflearn_onboarding_dismissed', 'true');
+  };
+
+  const dailyGoal = 3; // lessons or practice sessions per day
+  const todayProgress = (stats.practiceSessions || 0) % dailyGoal;
+  const dailyPercent = Math.min((todayProgress / dailyGoal) * 100, 100);
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Onboarding */}
+      {showOnboarding && (
+        <OnboardingWelcome
+          userName={profile?.name || undefined}
+          onDismiss={handleDismissOnboarding}
+        />
+      )}
+
       {/* Welcome */}
-      <div>
-        <h1 className="text-3xl font-bold">Welcome back! 👋</h1>
-        <p className="text-muted-foreground mt-1">Continue your sign language journey</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Welcome back! 👋</h1>
+          <p className="text-muted-foreground mt-1">Continue your sign language journey</p>
+        </div>
+        {streakData.current > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/20">
+            <Flame className="w-5 h-5 text-orange-500" />
+            <div className="text-right">
+              <p className="font-bold text-lg leading-none">{streakData.current}</p>
+              <p className="text-xs text-muted-foreground">day streak</p>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Daily Goal Progress */}
+      <Card className="border-border/50 shadow-card">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Target className="w-4 h-4 text-primary" />
+              <span className="font-medium text-sm">Daily Goal</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {todayProgress}/{dailyGoal} activities
+            </span>
+          </div>
+          <Progress value={dailyPercent} className="h-2" />
+        </CardContent>
+      </Card>
 
       {/* Stats */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -181,10 +225,10 @@ function StudentDashboard() {
           icon={Radio}
         />
         <StatsCard
-          title="Learning Streak"
-          value={stats.totalLessons?.toString() || "0"}
-          description="Keep it up!"
-          icon={TrendingUp}
+          title="Best Streak"
+          value={`${streakData.longest} days`}
+          description={streakData.current > 0 ? `🔥 ${streakData.current} day current` : "Start a streak!"}
+          icon={Trophy}
           variant="success"
         />
       </div>
