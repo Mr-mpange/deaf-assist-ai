@@ -125,6 +125,11 @@ export function LiveCaptionsPanel({ isHost, hostStream, onSignDetected }: LiveCa
         ]);
         setCurrentTranscript('');
         setCurrentMatchedSigns([]);
+
+        // Notify parent about matched sign words for avatar animation
+        if (matchedSigns.length > 0 && onSignDetected) {
+          onSignDetected(matchedSigns.map(s => s.word));
+        }
       }
 
       if (interim) {

@@ -60,6 +60,7 @@ import { SessionNotesPanel } from '@/components/SessionNotesPanel';
 import { SessionAnalytics } from '@/components/SessionAnalytics';
 import { LiveCaptionsPanel } from '@/components/LiveCaptionsPanel';
 import { VisualAlertOverlay } from '@/components/VisualAlertOverlay';
+import { SignLanguageAvatar } from '@/components/SignLanguageAvatar';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
