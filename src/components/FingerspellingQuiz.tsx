@@ -8,6 +8,7 @@ import { Loader2, Eye, Check, X, RotateCcw, Trophy, Timer, TrendingUp } from 'lu
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { recordResult } from '@/lib/spacedRepetition';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-hand-sign`;
 const IMAGE_CACHE_KEY = 'asl-hand-images';
