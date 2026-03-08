@@ -877,10 +877,17 @@ export default function LiveSessions() {
                 />
               )}
 
+              {/* 3D Sign Language Avatar - for everyone */}
+              <SignLanguageAvatar
+                wordQueue={avatarWordQueue}
+                onAnimationComplete={() => {}}
+              />
+
               {/* Live Captions with Sign Matching - for everyone */}
               <LiveCaptionsPanel
                 isHost={isHost}
                 hostStream={localStream}
+                onSignDetected={(words) => setAvatarWordQueue(words)}
               />
 
               {/* Session Chat - for everyone */}
