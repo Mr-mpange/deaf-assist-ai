@@ -278,7 +278,6 @@ export function FullscreenVideoModal({
                 muted={isLocal}
                 controls={false}
                 onClick={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
                 className="w-full h-full"
                 style={{ 
                   backgroundColor: '#000',
