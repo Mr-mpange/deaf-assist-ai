@@ -256,6 +256,39 @@ export type Database = {
         }
         Relationships: []
       }
+      quiz_scores: {
+        Row: {
+          completed_at: string
+          id: string
+          quiz_type: string
+          score: number
+          time_per_question: number | null
+          timed: boolean
+          total_questions: number
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string
+          id?: string
+          quiz_type?: string
+          score?: number
+          time_per_question?: number | null
+          timed?: boolean
+          total_questions?: number
+          user_id: string
+        }
+        Update: {
+          completed_at?: string
+          id?: string
+          quiz_type?: string
+          score?: number
+          time_per_question?: number | null
+          timed?: boolean
+          total_questions?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       raised_hands: {
         Row: {
           answer_confidence: number | null
