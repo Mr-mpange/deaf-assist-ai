@@ -103,6 +103,7 @@ export default function LiveSessions() {
   const [autoTimeoutId, setAutoTimeoutId] = useState<NodeJS.Timeout | null>(null);
   const [recentEndedSessions, setRecentEndedSessions] = useState<LiveSession[]>([]);
   const [analyticsSessionId, setAnalyticsSessionId] = useState<string | null>(null);
+  const [avatarWordQueue, setAvatarWordQueue] = useState<string[]>([]);
   
   const isTeacher = role === 'teacher' || role === 'admin';
   const isHost = activeSession?.host_id === user?.id;
