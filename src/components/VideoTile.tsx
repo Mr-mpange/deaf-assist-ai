@@ -8,7 +8,8 @@ import {
   VideoOff, 
   Crown,
   RefreshCw,
-  Video
+  Video,
+  Maximize2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -266,6 +267,24 @@ export function VideoTile({
           )}
         </div>
         
+        {/* Expand button overlay */}
+        {onClick && (
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <div className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center cursor-pointer transition-colors">
+              <Maximize2 className="w-4 h-4 text-white" />
+            </div>
+          </div>
+        )}
+
+        {/* Screen share indicator */}
+        {isScreenShare && (
+          <div className="absolute top-2 left-2 z-10">
+            <Badge variant="default" className="text-xs bg-primary/90">
+              Screen Share
+            </Badge>
+          </div>
+        )}
+
         {/* Name & Status Overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/60 to-transparent">
           <div className="flex items-center justify-between">
