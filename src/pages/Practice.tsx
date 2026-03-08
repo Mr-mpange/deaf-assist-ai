@@ -38,6 +38,7 @@ import { FingerspellingQuiz } from '@/components/FingerspellingQuiz';
 import { QuizLeaderboard } from '@/components/QuizLeaderboard';
 
 export default function Practice() {
+  const [leaderboardRefresh, setLeaderboardRefresh] = useState(0);
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [prediction, setPrediction] = useState<{ sign: string; confidence: number } | null>(null);
@@ -510,9 +511,9 @@ export default function Practice() {
 
           <TabsContent value="spell-quiz" className="mt-6">
             <div className="grid lg:grid-cols-2 gap-6">
-              <FingerspellingQuiz />
+              <FingerspellingQuiz onQuizComplete={() => setLeaderboardRefresh(k => k + 1)} />
               <div className="space-y-6">
-                <QuizLeaderboard />
+                <QuizLeaderboard refreshKey={leaderboardRefresh} />
                 <Card className="border-border/50 shadow-card">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
