@@ -28,9 +28,11 @@ interface LiveCaptionsPanelProps {
   isHost: boolean;
   /** Pass the host's MediaStream so we can capture audio for captions */
   hostStream?: MediaStream | null;
+  /** Callback when a sign-matched word is detected in speech */
+  onSignDetected?: (words: string[]) => void;
 }
 
-export function LiveCaptionsPanel({ isHost, hostStream }: LiveCaptionsPanelProps) {
+export function LiveCaptionsPanel({ isHost, hostStream, onSignDetected }: LiveCaptionsPanelProps) {
   const [isListening, setIsListening] = useState(false);
   const [captions, setCaptions] = useState<CaptionEntry[]>([]);
   const [currentTranscript, setCurrentTranscript] = useState('');
@@ -123,6 +125,11 @@ export function LiveCaptionsPanel({ isHost, hostStream }: LiveCaptionsPanelProps
         ]);
         setCurrentTranscript('');
         setCurrentMatchedSigns([]);
+
+        // Notify parent about matched sign words for avatar animation
+        if (matchedSigns.length > 0 && onSignDetected) {
+          onSignDetected(matchedSigns.map(s => s.word));
+        }
       }
 
       if (interim) {

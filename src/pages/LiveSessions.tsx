@@ -60,6 +60,7 @@ import { SessionNotesPanel } from '@/components/SessionNotesPanel';
 import { SessionAnalytics } from '@/components/SessionAnalytics';
 import { LiveCaptionsPanel } from '@/components/LiveCaptionsPanel';
 import { VisualAlertOverlay } from '@/components/VisualAlertOverlay';
+import { SignLanguageAvatar } from '@/components/SignLanguageAvatar';
 
 import { useSessionRecording } from '@/hooks/useSessionRecording';
 import { supabase } from '@/integrations/supabase/client';
@@ -102,6 +103,7 @@ export default function LiveSessions() {
   const [autoTimeoutId, setAutoTimeoutId] = useState<NodeJS.Timeout | null>(null);
   const [recentEndedSessions, setRecentEndedSessions] = useState<LiveSession[]>([]);
   const [analyticsSessionId, setAnalyticsSessionId] = useState<string | null>(null);
+  const [avatarWordQueue, setAvatarWordQueue] = useState<string[]>([]);
   
   const isTeacher = role === 'teacher' || role === 'admin';
   const isHost = activeSession?.host_id === user?.id;
@@ -875,10 +877,17 @@ export default function LiveSessions() {
                 />
               )}
 
+              {/* 3D Sign Language Avatar - for everyone */}
+              <SignLanguageAvatar
+                wordQueue={avatarWordQueue}
+                onAnimationComplete={() => {}}
+              />
+
               {/* Live Captions with Sign Matching - for everyone */}
               <LiveCaptionsPanel
                 isHost={isHost}
                 hostStream={localStream}
+                onSignDetected={(words) => setAvatarWordQueue(words)}
               />
 
               {/* Session Chat - for everyone */}
