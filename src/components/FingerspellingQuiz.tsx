@@ -82,6 +82,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 
 interface FingerspellingQuizProps {
   className?: string;
+  onQuizComplete?: () => void;
 }
 
 type QuizState = 'idle' | 'loading' | 'question' | 'result' | 'finished';
@@ -95,7 +96,7 @@ interface QuizScore {
   completed_at: string;
 }
 
-export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
+export function FingerspellingQuiz({ className, onQuizComplete }: FingerspellingQuizProps) {
   const [quizState, setQuizState] = useState<QuizState>('idle');
   const [quizLetters, setQuizLetters] = useState<string[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
