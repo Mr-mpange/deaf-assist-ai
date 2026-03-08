@@ -2,10 +2,11 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, Eye, Check, X, RotateCcw, Trophy } from 'lucide-react';
+import { Loader2, Eye, Check, X, RotateCcw, Trophy, Timer, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-hand-sign`;
 const IMAGE_CACHE_KEY = 'asl-hand-images';
@@ -43,6 +44,13 @@ interface FingerspellingQuizProps {
 
 type QuizState = 'idle' | 'loading' | 'question' | 'result' | 'finished';
 
+interface QuizScore {
+  score: number;
+  total_questions: number;
+  timed: boolean;
+  completed_at: string;
+}
+
 export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
   const [quizState, setQuizState] = useState<QuizState>('idle');
   const [quizLetters, setQuizLetters] = useState<string[]>([]);
@@ -54,10 +62,33 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
   const [images, setImages] = useState<Record<string, string>>(getCachedImages);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
   const [quizSize, setQuizSize] = useState(10);
+  const [timedMode, setTimedMode] = useState(false);
+  const [timePerQuestion, setTimePerQuestion] = useState(5);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [pastScores, setPastScores] = useState<QuizScore[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const fetchingRef = useRef(new Set<string>());
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { toast } = useToast();
 
   const currentLetter = quizLetters[currentIdx];
+
+  // Fetch past scores on mount
+  useEffect(() => {
+    const fetchScores = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('quiz_scores')
+        .select('score, total_questions, timed, completed_at')
+        .eq('user_id', user.id)
+        .eq('quiz_type', 'fingerspelling')
+        .order('completed_at', { ascending: false })
+        .limit(10);
+      if (data) setPastScores(data);
+    };
+    fetchScores();
+  }, []);
 
   const fetchImage = useCallback(async (letter: string): Promise<string | null> => {
     if (images[letter]) return images[letter];
@@ -99,10 +130,9 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
     setIsLoadingImage(true);
     setQuizState('loading');
     await fetchImage(currentLetter);
-    // Also pre-fetch next
     const nextLetter = quizLetters[currentIdx + 1];
     if (nextLetter && !images[nextLetter]) {
-      fetchImage(nextLetter); // fire and forget
+      fetchImage(nextLetter);
     }
     setIsLoadingImage(false);
     setQuizState('question');
@@ -113,6 +143,65 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
       loadCurrentQuestion();
     }
   }, [currentIdx, quizState, loadCurrentQuestion, currentLetter, images]);
+
+  // Timer logic
+  useEffect(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (quizState === 'question' && timedMode) {
+      setTimeLeft(timePerQuestion);
+      timerRef.current = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            // Time's up — auto-submit wrong
+            clearInterval(timerRef.current!);
+            timerRef.current = null;
+            setAnswerResult('wrong');
+            setTotalAnswered(p => p + 1);
+            setQuizState('result');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [quizState, currentIdx, timedMode, timePerQuestion]);
+
+  const saveScore = async (finalScore: number, totalQ: number) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase.from('quiz_scores').insert({
+      user_id: user.id,
+      score: finalScore,
+      total_questions: totalQ,
+      quiz_type: 'fingerspelling',
+      timed: timedMode,
+      time_per_question: timedMode ? timePerQuestion : null,
+    });
+
+    if (error) {
+      console.error('Failed to save score:', error);
+    } else {
+      setPastScores(prev => [{
+        score: finalScore,
+        total_questions: totalQ,
+        timed: timedMode,
+        completed_at: new Date().toISOString(),
+      }, ...prev].slice(0, 10));
+      toast({ title: 'Score Saved!', description: `${finalScore}/${totalQ} recorded to your profile` });
+    }
+  };
 
   const startQuiz = () => {
     const shuffled = shuffleArray(alphabet).slice(0, quizSize);
@@ -127,10 +216,15 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
 
   const submitAnswer = () => {
     if (!userAnswer.trim() || !currentLetter) return;
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     const isCorrect = userAnswer.trim().toLowerCase() === currentLetter;
     setAnswerResult(isCorrect ? 'correct' : 'wrong');
     setTotalAnswered(prev => prev + 1);
-    if (isCorrect) setScore(prev => prev + 1);
+    const newScore = isCorrect ? score + 1 : score;
+    if (isCorrect) setScore(newScore);
     setQuizState('result');
   };
 
@@ -138,7 +232,9 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
     setUserAnswer('');
     setAnswerResult(null);
     if (currentIdx + 1 >= quizLetters.length) {
+      const finalScore = score;
       setQuizState('finished');
+      saveScore(finalScore, quizLetters.length);
     } else {
       setCurrentIdx(prev => prev + 1);
       setQuizState('loading');
@@ -152,6 +248,7 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
   }, [quizState]);
 
   const progress = quizLetters.length > 0 ? ((currentIdx + (quizState === 'finished' ? 1 : 0)) / quizLetters.length) * 100 : 0;
+  const timerPercent = timedMode && quizState === 'question' ? (timeLeft / timePerQuestion) * 100 : 100;
 
   return (
     <Card className={cn('border-border/50 shadow-card', className)}>
@@ -163,28 +260,104 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
       </CardHeader>
       <CardContent>
         {quizState === 'idle' && (
-          <div className="text-center py-8 space-y-4">
-            <Eye className="w-12 h-12 mx-auto text-muted-foreground/50" />
-            <div>
+          <div className="space-y-5">
+            <div className="text-center py-4 space-y-2">
+              <Eye className="w-12 h-12 mx-auto text-muted-foreground/50" />
               <p className="font-medium text-foreground">Test your ASL alphabet knowledge!</p>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground">
                 See a hand sign image and type the correct letter
               </p>
             </div>
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-sm text-muted-foreground">Questions:</span>
-              <select
-                value={quizSize}
-                onChange={(e) => setQuizSize(Number(e.target.value))}
-                className="text-sm bg-muted rounded-md px-2 py-1 border border-border text-foreground"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={15}>15</option>
-                <option value={26}>All 26</option>
-              </select>
+
+            {/* Settings */}
+            <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Questions:</span>
+                <select
+                  value={quizSize}
+                  onChange={(e) => setQuizSize(Number(e.target.value))}
+                  className="text-sm bg-background rounded-md px-2 py-1 border border-border text-foreground"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={26}>All 26</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Timer className="w-4 h-4 text-primary" />
+                  <span className="text-sm text-muted-foreground">Timed Challenge:</span>
+                </div>
+                <button
+                  onClick={() => setTimedMode(!timedMode)}
+                  className={cn(
+                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                    timedMode ? 'bg-primary' : 'bg-muted-foreground/30'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'inline-block h-4 w-4 rounded-full bg-background transition-transform',
+                      timedMode ? 'translate-x-6' : 'translate-x-1'
+                    )}
+                  />
+                </button>
+              </div>
+
+              {timedMode && (
+                <div className="flex items-center justify-between animate-fade-in">
+                  <span className="text-sm text-muted-foreground">Seconds per question:</span>
+                  <select
+                    value={timePerQuestion}
+                    onChange={(e) => setTimePerQuestion(Number(e.target.value))}
+                    className="text-sm bg-background rounded-md px-2 py-1 border border-border text-foreground"
+                  >
+                    <option value={3}>3s (Hard)</option>
+                    <option value={5}>5s (Normal)</option>
+                    <option value={8}>8s (Easy)</option>
+                    <option value={10}>10s (Relaxed)</option>
+                  </select>
+                </div>
+              )}
             </div>
-            <Button onClick={startQuiz}>Start Quiz</Button>
+
+            <Button onClick={startQuiz} className="w-full">
+              {timedMode ? '⚡ Start Timed Challenge' : 'Start Quiz'}
+            </Button>
+
+            {/* Past scores */}
+            {pastScores.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  Recent Scores
+                </div>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {pastScores.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs p-2 bg-muted/30 rounded">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-foreground">
+                          {s.score}/{s.total_questions}
+                        </span>
+                        <span className="text-muted-foreground">
+                          ({Math.round((s.score / s.total_questions) * 100)}%)
+                        </span>
+                        {s.timed && (
+                          <span className="text-primary flex items-center gap-0.5">
+                            <Timer className="w-3 h-3" /> timed
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-muted-foreground">
+                        {new Date(s.completed_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -203,6 +376,27 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
               <span>Score: {score}/{totalAnswered}</span>
             </div>
             <Progress value={progress} className="h-1.5" />
+
+            {/* Timer bar */}
+            {timedMode && quizState === 'question' && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1 text-primary">
+                    <Timer className="w-3 h-3" />
+                    <span>{timeLeft}s</span>
+                  </div>
+                </div>
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-1000 ease-linear',
+                      timerPercent > 50 ? 'bg-primary' : timerPercent > 25 ? 'bg-accent' : 'bg-destructive'
+                    )}
+                    style={{ width: `${timerPercent}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Hand image */}
             <div className="flex justify-center">
@@ -253,7 +447,9 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
                   <div className="space-y-1">
                     <div className="flex items-center justify-center gap-2 text-destructive">
                       <X className="w-6 h-6" />
-                      <span className="font-bold text-lg">Not quite</span>
+                      <span className="font-bold text-lg">
+                        {timeLeft === 0 && timedMode ? "Time's up!" : 'Not quite'}
+                      </span>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       The answer was <span className="font-bold text-primary uppercase">{currentLetter}</span>
@@ -273,6 +469,12 @@ export function FingerspellingQuiz({ className }: FingerspellingQuizProps) {
             <Trophy className="w-12 h-12 mx-auto text-primary" />
             <div>
               <p className="text-2xl font-bold text-foreground">{score} / {quizLetters.length}</p>
+              {timedMode && (
+                <p className="text-xs text-primary mt-1 flex items-center justify-center gap-1">
+                  <Timer className="w-3 h-3" />
+                  Timed challenge ({timePerQuestion}s per question)
+                </p>
+              )}
               <p className="text-sm text-muted-foreground mt-1">
                 {score === quizLetters.length
                   ? 'Perfect score! You nailed every letter! 🎉'
