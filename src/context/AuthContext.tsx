@@ -42,10 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     if (data) {
-      console.log('Profile data loaded:', data);
       setProfile(data);
-    } else {
-      console.log('No profile data found for user:', userId);
     }
   };
 
