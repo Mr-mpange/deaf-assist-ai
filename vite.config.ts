@@ -22,6 +22,9 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: 'esnext',
     minify: 'esbuild',
+    esbuild: {
+      drop: mode === 'production' ? ['console', 'debugger'] : [],
+    },
     sourcemap: true, // Enable sourcemaps for debugging
     rollupOptions: {
       output: {
